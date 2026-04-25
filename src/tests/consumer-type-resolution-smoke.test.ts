@@ -16,6 +16,7 @@ describe("consumer type resolution", () => {
         "exec",
         "tsc",
         "--noEmit",
+        "--ignoreConfig",
         "--strict",
         "--exactOptionalPropertyTypes",
         "--noUncheckedIndexedAccess",

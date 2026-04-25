@@ -12,6 +12,7 @@
     "sourceMap": true,
     "noEmit": true,
     "skipLibCheck": true,
+    "types": ["node"],
     "verbatimModuleSyntax": true
   },
   "include": ["src/**/*.ts"],
