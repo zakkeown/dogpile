@@ -18,6 +18,25 @@ console.log(result.output);
 console.log(result.trace.events);
 ```
 
+## Research Basis
+
+Dogpile's protocol vocabulary and paper-faithfulness examples are based on:
+
+Dochkina, V. (2026). *Drop the Hierarchy and Roles: How Self-Organizing LLM Agents Outperform Designed Structures*. arXiv:2603.28990 [cs.AI]. https://doi.org/10.48550/arXiv.2603.28990
+
+```bibtex
+@misc{dochkina2026drop,
+  title = {Drop the Hierarchy and Roles: How Self-Organizing LLM Agents Outperform Designed Structures},
+  author = {Dochkina, Victoria},
+  year = {2026},
+  eprint = {2603.28990},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.AI},
+  doi = {10.48550/arXiv.2603.28990},
+  url = {https://arxiv.org/abs/2603.28990}
+}
+```
+
 ## Why Dogpile
 
 - **Provider-neutral by default.** Any object with `id` and `generate(request)` can be the model boundary.
