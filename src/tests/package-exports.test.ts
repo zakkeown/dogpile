@@ -54,6 +54,12 @@ type PackageManifest = {
   readonly scripts: Record<string, string>;
 };
 
+type ReleaseIdentity = {
+  readonly packageName: string;
+  readonly version: string;
+  readonly packFilename: string;
+};
+
 const rootDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const execFileAsync = promisify(execFile);
 const privateHelperExportNames = [
@@ -99,6 +105,10 @@ const privateHelperPackageSubpaths = [
 
 async function readManifest(): Promise<PackageManifest> {
   return JSON.parse(await readFile(join(rootDir, "package.json"), "utf8")) as PackageManifest;
+}
+
+async function readReleaseIdentity(): Promise<ReleaseIdentity> {
+  return JSON.parse(await readFile(join(rootDir, "scripts", "release-identity.json"), "utf8")) as ReleaseIdentity;
 }
 
 type PackFile = {
@@ -229,10 +239,13 @@ function importPackageSubpath(specifier: string): Promise<unknown> {
 
 describe("package exports", () => {
   it("declares the public scoped npm package identity", async () => {
-    const manifest = await readManifest();
+    const [manifest, releaseIdentity] = await Promise.all([
+      readManifest(),
+      readReleaseIdentity()
+    ]);
 
-    expect(manifest.name).toBe("@dogpile/sdk");
-    expect(manifest.version).toBe("0.1.2");
+    expect(manifest.name).toBe(releaseIdentity.packageName);
+    expect(manifest.version).toBe(releaseIdentity.version);
     expect(manifest.license).toBe("Apache-2.0");
     expect(manifest.repository).toEqual({
       type: "git",
@@ -257,6 +270,7 @@ describe("package exports", () => {
   });
 
   it("runs the local package identity guard against stale unscoped references", async () => {
+    const releaseIdentity = await readReleaseIdentity();
     const { stderr, stdout } = await execFileAsync("node", [
       join(rootDir, "scripts", "check-package-identity.mjs")
     ], {
@@ -264,7 +278,9 @@ describe("package exports", () => {
     });
 
     expect(stderr).toBe("");
-    expect(stdout).toContain("Package identity check passed for @dogpile/sdk@0.1.2");
+    expect(stdout).toContain(
+      `Package identity check passed for ${releaseIdentity.packageName}@${releaseIdentity.version}`
+    );
   });
 
   it("wires pack:check to the packed JavaScript and declaration map guard", async () => {
@@ -281,6 +297,7 @@ describe("package exports", () => {
     expect(manifest.scripts["package:artifacts"]).toBe("node scripts/check-package-artifacts.mjs");
     expect(manifest.scripts["quickstart:smoke"]).toBe("node scripts/consumer-import-smoke.mjs");
     expect(manifest.scripts["consumer:smoke"]).toBe("node scripts/consumer-import-smoke.mjs");
+    expect(manifest.scripts["benchmark:baseline"]).toBe("pnpm run build && node scripts/benchmark-baseline.mjs");
     expect(manifest.scripts.verify).toContain("pnpm run build && pnpm run package:artifacts");
     expect(manifest.scripts.verify).toContain(
       "pnpm run package:artifacts && pnpm run quickstart:smoke -- --skip-build"
@@ -869,6 +886,66 @@ describe("package exports", () => {
     }
   });
 
+  it("rejects release identity drift across README and changelog", async () => {
+    const releaseIdentity = await readReleaseIdentity();
+    const tempDir = await mkdtemp(join(tmpdir(), "dogpile-release-identity-"));
+
+    try {
+      await Promise.all([
+        writeFile(join(tempDir, "package.json"), JSON.stringify({
+          name: releaseIdentity.packageName,
+          version: releaseIdentity.version,
+          license: "Apache-2.0",
+          repository: {
+            type: "git",
+            url: "git+https://github.com/bubstack/dogpile.git"
+          },
+          bugs: {
+            url: "https://github.com/bubstack/dogpile/issues"
+          },
+          homepage: "https://github.com/bubstack/dogpile#readme",
+          keywords: [
+            "ai",
+            "agents",
+            "llm",
+            "multi-agent",
+            "protocols",
+            "openai-compatible",
+            "provider-neutral",
+            "typescript"
+          ],
+          packageManager: "pnpm@10.33.0",
+          publishConfig: {
+            access: "public"
+          }
+        }, null, 2), "utf8"),
+        writeFile(join(tempDir, "README.md"), "@dogpile/sdk@0.1.2 dogpile-sdk-0.1.2.tgz\n", "utf8"),
+        writeFile(join(tempDir, "CHANGELOG.md"), "## 0.1.2\n\n- @dogpile/sdk@0.1.2 dogpile-sdk-0.1.2.tgz\n", "utf8")
+      ]);
+
+      try {
+        await execFileAsync("node", [
+          join(rootDir, "scripts", "check-package-identity.mjs"),
+          "--root",
+          tempDir
+        ], {
+          cwd: rootDir
+        });
+        throw new Error("Expected package identity check to fail.");
+      } catch (error) {
+        const execError = error as { readonly code?: number; readonly stderr?: string };
+
+        expect(execError.code).toBe(1);
+        expect(execError.stderr).toContain("README.md must include current release identity snippet");
+        expect(execError.stderr).toContain("CHANGELOG.md must include current release identity snippet");
+        expect(execError.stderr).toContain(`${releaseIdentity.packageName}@${releaseIdentity.version}`);
+        expect(execError.stderr).toContain(releaseIdentity.packFilename);
+      }
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
   it("wires required release validation jobs into CI", async () => {
     const workflow = await readFile(
       join(rootDir, ".github", "workflows", "release-validation.yml"),
@@ -968,7 +1045,8 @@ describe("package exports", () => {
   });
 
   it("documents the scoped npm install and release tarball identity", async () => {
-    const [readme, changelog] = await Promise.all([
+    const [releaseIdentity, readme, changelog] = await Promise.all([
+      readReleaseIdentity(),
       readFile(join(rootDir, "README.md"), "utf8"),
       readFile(join(rootDir, "CHANGELOG.md"), "utf8")
     ]);
@@ -976,9 +1054,11 @@ describe("package exports", () => {
     expect(readme).toContain("pnpm add @dogpile/sdk");
     expect(readme).toContain("npm install @dogpile/sdk");
     expect(readme).toContain("yarn add @dogpile/sdk");
-    expect(readme).toContain("@dogpile/sdk@0.1.2");
-    expect(readme).toContain("dogpile-sdk-0.1.2.tgz");
-    expect(changelog).toContain("## 0.1.2");
+    expect(readme).toContain(`${releaseIdentity.packageName}@${releaseIdentity.version}`);
+    expect(readme).toContain(releaseIdentity.packFilename);
+    expect(changelog).toContain(`## ${releaseIdentity.version}`);
+    expect(changelog).toContain(`${releaseIdentity.packageName}@${releaseIdentity.version}`);
+    expect(changelog).toContain(releaseIdentity.packFilename);
     expect(changelog).toContain("@dogpile/sdk");
     expect(changelog).toContain("dogpile-sdk-0.1.1.tgz");
   });
@@ -1025,7 +1105,18 @@ describe("package exports", () => {
       "src/types.ts",
       "src/browser/index.ts",
       "src/providers/openai-compatible.ts",
-      "src/runtime/*.ts",
+      "src/runtime/broadcast.ts",
+      "src/runtime/cancellation.ts",
+      "src/runtime/coordinator.ts",
+      "src/runtime/decisions.ts",
+      "src/runtime/defaults.ts",
+      "src/runtime/engine.ts",
+      "src/runtime/model.ts",
+      "src/runtime/sequential.ts",
+      "src/runtime/shared.ts",
+      "src/runtime/termination.ts",
+      "src/runtime/tools.ts",
+      "src/runtime/validation.ts",
       "README.md",
       "CHANGELOG.md",
       "LICENSE"
@@ -1036,12 +1127,14 @@ describe("package exports", () => {
     expect(manifest.files).not.toContain("dist");
     expect(manifest.files).not.toContain("dist/**/*.js");
     expect(manifest.files).not.toContain("src/**/*.ts");
+    expect(manifest.files).not.toContain("src/runtime/*.ts");
     expect(manifest.files).not.toContain("pnpm-lock.yaml");
     expect(manifest.files).not.toContain("seed.yaml");
     expect(manifest.files).not.toContain("CLAUDE.md");
   });
 
   it("packs built artifacts, declarations, and metadata without source-only or local files", async () => {
+    const releaseIdentity = await readReleaseIdentity();
     const { stdout } = await execFileAsync("npm", [
       "pack",
       "--dry-run",
@@ -1064,10 +1157,10 @@ describe("package exports", () => {
     expect(packedPathSet.has("README.md")).toBe(true);
     expect(packedPathSet.has("CHANGELOG.md")).toBe(true);
     expect(packedPathSet.has("LICENSE")).toBe(true);
-    expect(packManifest.id).toBe("@dogpile/sdk@0.1.2");
-    expect(packManifest.name).toBe("@dogpile/sdk");
-    expect(packManifest.version).toBe("0.1.2");
-    expect(packManifest.filename).toBe("dogpile-sdk-0.1.2.tgz");
+    expect(packManifest.id).toBe(`${releaseIdentity.packageName}@${releaseIdentity.version}`);
+    expect(packManifest.name).toBe(releaseIdentity.packageName);
+    expect(packManifest.version).toBe(releaseIdentity.version);
+    expect(packManifest.filename).toBe(releaseIdentity.packFilename);
     expect(packedPaths.some((path) => path.startsWith("dist/") && path.endsWith(".js"))).toBe(true);
     expect(packedPaths.some((path) => path.startsWith("dist/") && path.endsWith(".d.ts"))).toBe(true);
     expect(packedPaths.some((path) => path.startsWith("dist/") && path.endsWith(".map"))).toBe(true);
@@ -1097,6 +1190,7 @@ describe("package exports", () => {
     expect(packedPathSet.has("src/runtime/validation.ts")).toBe(true);
     expect(packedPaths.every((path) => !path.startsWith("test/"))).toBe(true);
     expect(packedPaths.every((path) => !path.startsWith("benchmark-fixtures/"))).toBe(true);
+    expect(packedPaths.every((path) => !path.endsWith(".test.ts"))).toBe(true);
     expect(packedPathSet.has("dist/internal.js")).toBe(false);
     expect(packedPathSet.has("dist/demo.js")).toBe(false);
     expect(packedPaths.every((path) => !path.startsWith("dist/benchmark/"))).toBe(true);

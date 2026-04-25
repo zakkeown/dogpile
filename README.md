@@ -102,22 +102,22 @@ pnpm run build
 pnpm pack --pack-destination ./packed
 ```
 
-The local tarball is named `dogpile-sdk-0.1.2.tgz` for the scoped package
-`@dogpile/sdk@0.1.2`. Install that tarball into a fresh consumer project:
+The local tarball is named `dogpile-sdk-0.2.0.tgz` for the scoped package
+`@dogpile/sdk@0.2.0`. Install that tarball into a fresh consumer project:
 
 ```sh
 mkdir ../dogpile-quickstart
 cd ../dogpile-quickstart
 pnpm init
-pnpm add ../dogpile/packed/dogpile-sdk-0.1.2.tgz
+pnpm add ../dogpile/packed/dogpile-sdk-0.2.0.tgz
 ```
 
 Equivalent install commands for other supported package managers are:
 
 ```sh
-npm install ../dogpile/packed/dogpile-sdk-0.1.2.tgz
-yarn add ../dogpile/packed/dogpile-sdk-0.1.2.tgz
-bun add ../dogpile/packed/dogpile-sdk-0.1.2.tgz
+npm install ../dogpile/packed/dogpile-sdk-0.2.0.tgz
+yarn add ../dogpile/packed/dogpile-sdk-0.2.0.tgz
+bun add ../dogpile/packed/dogpile-sdk-0.2.0.tgz
 ```
 
 ## Versioning and Stability
@@ -140,6 +140,7 @@ Before publishing, run the local package gates:
 pnpm run package:identity
 pnpm run package:artifacts
 pnpm run browser:smoke
+pnpm run benchmark:baseline
 pnpm run quickstart:smoke
 pnpm run verify
 pnpm run pack:check
@@ -151,6 +152,7 @@ What each gate proves:
 - `package:identity` asserts the scoped npm package name `@dogpile/sdk`, the current release identity, required package metadata, and release-facing references in source, docs, tests, and CI.
 - `package:artifacts` verifies that package metadata references only emitted runtime JavaScript and TypeScript declaration files covered by `package.json` `files`.
 - `browser:smoke` rebuilds the browser ESM bundle and imports `@dogpile/sdk` through the package root `browser` condition.
+- `benchmark:baseline` rebuilds `dist`, runs the deterministic protocol-loop timing harness, and prints repeatable JSON for local before/after comparisons.
 - `quickstart:smoke` creates a real `pnpm pack` tarball, installs it into a fresh consumer project, and asserts the dependency and lockfile resolve `@dogpile/sdk` from the `.tgz` instead of `workspace:` or `link:` metadata.
 - `quickstart:smoke` also verifies installed entrypoints and `dist` imports do not resolve through local source imports, imports every public package subpath from the installed tarball, runs the marked README quickstart, runs `tsc --noEmit` from the consumer project, verifies private helper files are absent from the installed tarball, and proves private helper subpaths remain blocked by package exports.
 - `consumer:smoke` is kept as the same packed-tarball quickstart smoke command for compatibility.
@@ -158,7 +160,7 @@ What each gate proves:
 - `pack:check` runs package identity, rebuilds `dist`, verifies package artifacts, runs the packed-tarball quickstart smoke, checks packed JavaScript source maps and declaration maps, and finishes with `npm pack --dry-run`.
 - `publish:check` runs `verify`, reruns the package artifact guard, and then runs `npm publish --dry-run` so the package metadata, export map, and publishable files are checked without publishing.
 
-The release identity is `@dogpile/sdk@0.1.2`. A real `pnpm pack` or `npm pack` for this scoped package produces the local tarball `dogpile-sdk-0.1.2.tgz`; the dry-run package gate must report that tarball filename and the scoped npm package name before publish. See `CHANGELOG.md` for release notes and breaking-change documentation.
+The release identity is `@dogpile/sdk@0.2.0`. A real `pnpm pack` or `npm pack` for this scoped package produces the local tarball `dogpile-sdk-0.2.0.tgz`; the dry-run package gate must report that tarball filename and the scoped npm package name before publish. See `CHANGELOG.md` for release notes and breaking-change documentation.
 
 The browser ESM target is emitted at `dist/browser/index.js` with `dist/browser/index.js.map`; both the package root `browser` condition and the explicit `@dogpile/sdk/browser` subpath resolve to that bundled artifact.
 

@@ -127,6 +127,28 @@ describe("createOpenAICompatibleProvider", () => {
     });
   });
 
+  it("normalizes fetch transport failures to stable DogpileError codes", async () => {
+    const transportError = new TypeError("fetch failed");
+    const provider = createOpenAICompatibleProvider({
+      model: "gpt-4.1-mini",
+      fetch: async () => {
+        throw transportError;
+      }
+    });
+
+    await expect(provider.generate(request)).rejects.toMatchObject({
+      name: "DogpileError",
+      code: "provider-error",
+      message: "fetch failed",
+      providerId: "openai-compatible:gpt-4.1-mini",
+      retryable: true,
+      cause: transportError,
+      detail: {
+        name: "TypeError"
+      }
+    });
+  });
+
   it("validates adapter options before returning a provider", () => {
     expect(() => createOpenAICompatibleProvider({ model: "" })).toThrow(DogpileError);
     expect(() =>

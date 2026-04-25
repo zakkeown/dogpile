@@ -86,12 +86,18 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleProvider
   return {
     id: providerId,
     async generate(request: ModelRequest): Promise<ModelResponse> {
-      const response = await fetchImplementation(createURL(options), {
-        method: "POST",
-        headers: createHeaders(options),
-        body: JSON.stringify(createBody(options, request)),
-        ...(request.signal !== undefined ? { signal: request.signal } : {})
-      });
+      let response: Response;
+
+      try {
+        response = await fetchImplementation(createURL(options), {
+          method: "POST",
+          headers: createHeaders(options),
+          body: JSON.stringify(createBody(options, request)),
+          ...(request.signal !== undefined ? { signal: request.signal } : {})
+        });
+      } catch (error) {
+        throw normalizeFetchError(error, providerId);
+      }
 
       const payload = await readJson(response, providerId);
 
@@ -337,7 +343,7 @@ function responseMetadata(response: OpenAICompatibleChatCompletionResponse): Jso
 function createProviderError(response: Response, payload: unknown, providerId: string): DogpileError {
   return new DogpileError({
     code: codeForStatus(response.status),
-    message: errorMessage(response, payload),
+    message: providerResponseErrorMessage(response, payload),
     retryable: response.status === 408 || response.status === 429 || response.status >= 500,
     providerId,
     detail: removeUndefined({
@@ -345,6 +351,35 @@ function createProviderError(response: Response, payload: unknown, providerId: s
       statusText: response.statusText,
       response: isJsonValue(payload) ? payload : undefined
     })
+  });
+}
+
+function normalizeFetchError(error: unknown, providerId: string): DogpileError {
+  if (DogpileError.isInstance(error)) {
+    return error;
+  }
+
+  if (errorName(error) === "AbortError") {
+    return new DogpileError({
+      code: "aborted",
+      message: providerTransportErrorMessage(error, "OpenAI-compatible provider request was aborted."),
+      cause: error,
+      retryable: false,
+      providerId,
+      detail: errorDetail(error)
+    });
+  }
+
+  return new DogpileError({
+    code: "provider-error",
+    message: providerTransportErrorMessage(
+      error,
+      "OpenAI-compatible provider request failed before receiving a response."
+    ),
+    cause: error,
+    retryable: true,
+    providerId,
+    detail: errorDetail(error)
   });
 }
 
@@ -370,11 +405,30 @@ function codeForStatus(status: number): DogpileErrorCode {
   return "provider-error";
 }
 
-function errorMessage(response: Response, payload: unknown): string {
+function providerResponseErrorMessage(response: Response, payload: unknown): string {
   const providerMessage = isRecord(payload) && isRecord(payload.error) && typeof payload.error.message === "string"
     ? payload.error.message
     : undefined;
   return providerMessage ?? `OpenAI-compatible provider request failed with HTTP ${response.status}.`;
+}
+
+function errorDetail(error: unknown): JsonObject {
+  const detail: Record<string, JsonValue> = {};
+  const name = errorName(error);
+
+  if (name !== undefined) {
+    detail.name = name;
+  }
+
+  return detail;
+}
+
+function errorName(error: unknown): string | undefined {
+  return isRecord(error) && typeof error.name === "string" ? error.name : undefined;
+}
+
+function providerTransportErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 function removeUndefined(values: Record<string, JsonValue | undefined>): JsonObject {

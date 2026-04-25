@@ -412,10 +412,16 @@ pnpm exec vitest run src/tests/package-exports.test.ts src/tests/public-error-ap
 Before a release:
 
 ```sh
+pnpm run benchmark:baseline
 pnpm run verify
 pnpm run pack:check
 pnpm run publish:check
 ```
+
+Use `pnpm run benchmark:baseline -- --iterations 50` when you need a local
+before/after timing comparison for existing deterministic protocol-loop
+behavior. Treat the JSON output as a baseline artifact, not as a user-facing
+performance claim.
 
 The packaged README quickstart is not ornamental. The consumer smoke test
 extracts the marked quickstart block from the installed package and executes it

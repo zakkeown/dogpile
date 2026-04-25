@@ -1,12 +1,9 @@
 #!/usr/bin/env node
 
 import { readdir, readFile } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const expectedPackageName = "@dogpile/sdk";
-const expectedVersion = "0.1.2";
-const expectedPackFilename = "dogpile-sdk-0.1.2.tgz";
 const expectedPackageMetadata = {
   license: "Apache-2.0",
   repository: {
@@ -32,6 +29,7 @@ const expectedPackageMetadata = {
     access: "public"
   }
 };
+const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = readRootDir(process.argv.slice(2));
 
 const ignoredDirectories = new Set([
@@ -82,6 +80,10 @@ const staleReferencePatterns = [
 ];
 
 async function main() {
+  const releaseIdentity = await readReleaseIdentity();
+  const expectedPackageName = releaseIdentity.packageName;
+  const expectedVersion = releaseIdentity.version;
+  const expectedPackFilename = releaseIdentity.packFilename;
   const manifest = JSON.parse(await readFile(join(rootDir, "package.json"), "utf8"));
   const findings = [];
 
@@ -102,6 +104,12 @@ async function main() {
       );
     }
   }
+
+  findings.push(...await checkReleaseReferences({
+    expectedPackageName,
+    expectedVersion,
+    expectedPackFilename
+  }));
 
   const files = await collectFiles(rootDir);
 
@@ -129,6 +137,66 @@ async function main() {
   }
 
   console.log(`Package identity check passed for ${expectedPackageName}@${expectedVersion} (${expectedPackFilename}).`);
+}
+
+async function readReleaseIdentity() {
+  const identity = JSON.parse(await readFile(join(scriptDir, "release-identity.json"), "utf8"));
+
+  if (
+    typeof identity !== "object" ||
+    identity === null ||
+    typeof identity.packageName !== "string" ||
+    typeof identity.version !== "string" ||
+    typeof identity.packFilename !== "string"
+  ) {
+    throw new Error("scripts/release-identity.json must declare packageName, version, and packFilename strings.");
+  }
+
+  return identity;
+}
+
+async function checkReleaseReferences({ expectedPackageName, expectedVersion, expectedPackFilename }) {
+  const checks = [
+    {
+      path: "README.md",
+      snippets: [
+        `${expectedPackageName}@${expectedVersion}`,
+        expectedPackFilename
+      ]
+    },
+    {
+      path: "CHANGELOG.md",
+      snippets: [
+        `## ${expectedVersion}`,
+        `${expectedPackageName}@${expectedVersion}`,
+        expectedPackFilename
+      ]
+    }
+  ];
+  const findings = [];
+
+  for (const check of checks) {
+    const filePath = join(rootDir, check.path);
+    let contents = "";
+
+    try {
+      contents = await readFile(filePath, "utf8");
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        findings.push(`${check.path} must exist and include the current release identity.`);
+        continue;
+      }
+      throw error;
+    }
+
+    for (const snippet of check.snippets) {
+      if (!contents.includes(snippet)) {
+        findings.push(`${check.path} must include current release identity snippet ${JSON.stringify(snippet)}.`);
+      }
+    }
+  }
+
+  return findings;
 }
 
 async function collectFiles(directory) {
@@ -174,6 +242,10 @@ function getLocation(contents, index) {
 
 function sameJsonValue(actual, expected) {
   return JSON.stringify(actual) === JSON.stringify(expected);
+}
+
+function isMissingFileError(error) {
+  return typeof error === "object" && error !== null && error.code === "ENOENT";
 }
 
 function readRootDir(args) {

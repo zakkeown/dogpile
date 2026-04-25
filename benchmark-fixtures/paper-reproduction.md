@@ -88,7 +88,7 @@ coverage, but the reproduction pass/fail margin remains
 
 The deterministic unit-test implementation imports the benchmark runner helpers
 and deterministic provider fixtures from `../src/internal.js`. It is
-`test/benchmark-config.test.ts` under the assertion
+`src/benchmark/config.test.ts` under the assertion
 `asserts Sequential outperforms Coordinator on the selected release-readiness benchmark`.
 The committed markdown report should be updated whenever the fixture, rubric,
 protocol configs, provider behavior, or expected floors change.
@@ -149,7 +149,7 @@ Sequential beats Coordinator by at least `5` points under the controlled setup.
 ## Reproduced Result
 
 The deterministic reproduction is committed as
-`test/benchmark-config.test.ts` under the assertion
+`src/benchmark/config.test.ts` under the assertion
 `asserts Sequential outperforms Coordinator on the selected release-readiness benchmark`.
 It runs Sequential and Coordinator against the same fixture intent, model
 provider, temperature, budget, seed, and four-agent roster, then packages both
@@ -158,13 +158,13 @@ runs as JSON-serializable benchmark artifacts.
 Latest verified command:
 
 ```sh
-pnpm exec vitest run test/benchmark-config.test.ts -t "asserts Sequential outperforms Coordinator"
+pnpm exec vitest run src/benchmark/config.test.ts -t "asserts Sequential outperforms Coordinator"
 ```
 
 Required prerequisites:
 
 - Run from the repository root, where `package.json`,
-  `test/benchmark-config.test.ts`, and
+  `src/benchmark/config.test.ts`, and
   `benchmark-fixtures/l3-release-readiness-triage.yaml` are present.
 - Use Node `>=22`; this report was last verified with Node `v22.22.1`.
 - Use pnpm matching the package manager declaration, `pnpm@10.33.0`.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0
+
+- Prepared the Snow Leopard hardening release identity for `@dogpile/sdk@0.2.0` and `dogpile-sdk-0.2.0.tgz`.
+- Centralized release identity checks so manifest, README, changelog, package guard, package export tests, and pack metadata assertions drift together.
+- Normalized OpenAI-compatible fetch/network failures into stable `DogpileError` provider codes.
+- Tightened the publishable source allowlist so runtime test files stay out of the npm tarball.
+- Added a deterministic `pnpm run benchmark:baseline` timing harness for protocol-loop baseline comparisons without making a performance claim.
+- Corrected benchmark reproduction documentation paths and commands to point at the live `src/benchmark/config.test.ts` suite.
+
 ## 0.1.2
 
 - Cleaned up the README release verification section so the npm package page has readable gate descriptions instead of a single dense paragraph.
