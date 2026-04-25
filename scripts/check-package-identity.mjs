@@ -5,8 +5,8 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const expectedPackageName = "@dogpile/sdk";
-const expectedVersion = "0.1.1";
-const expectedPackFilename = "dogpile-sdk-0.1.1.tgz";
+const expectedVersion = "0.1.2";
+const expectedPackFilename = "dogpile-sdk-0.1.2.tgz";
 const expectedPackageMetadata = {
   license: "Apache-2.0",
   repository: {

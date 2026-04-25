@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- Cleaned up the README release verification section so the npm package page has readable gate descriptions instead of a single dense paragraph.
+- Prepared the patch release identity for `@dogpile/sdk@0.1.2` and `dogpile-sdk-0.1.2.tgz`.
+
 ## 0.1.1
 
 - Updated npm package metadata after the GitHub repository transfer from `zakkeown/dogpile` to `bubstack/dogpile`.
