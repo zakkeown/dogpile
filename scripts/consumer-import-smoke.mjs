@@ -947,6 +947,7 @@ async function runConsumerTypecheck(typeSmokeFile, consumerDir) {
   await run("node", [
     join(rootDir, "node_modules", "typescript", "bin", "tsc"),
     "--noEmit",
+    "--ignoreConfig",
     "--strict",
     "--exactOptionalPropertyTypes",
     "--noUncheckedIndexedAccess",
