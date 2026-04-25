@@ -1,0 +1,157 @@
+{
+  "name": "@dogpile/sdk",
+  "version": "1.0.0",
+  "description": "TypeScript SDK for running multi-agent LLM coordination protocols.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zakkeown/dogpile.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zakkeown/dogpile/issues"
+  },
+  "homepage": "https://github.com/zakkeown/dogpile#readme",
+  "keywords": [
+    "ai",
+    "agents",
+    "llm",
+    "multi-agent",
+    "protocols",
+    "openai-compatible",
+    "provider-neutral",
+    "typescript"
+  ],
+  "packageManager": "pnpm@10.33.0",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "browser": "./dist/browser/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/browser/index.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js",
+      "default": "./dist/browser/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js",
+      "default": "./dist/types.js"
+    },
+    "./runtime/broadcast": {
+      "types": "./dist/runtime/broadcast.d.ts",
+      "import": "./dist/runtime/broadcast.js",
+      "default": "./dist/runtime/broadcast.js"
+    },
+    "./runtime/coordinator": {
+      "types": "./dist/runtime/coordinator.d.ts",
+      "import": "./dist/runtime/coordinator.js",
+      "default": "./dist/runtime/coordinator.js"
+    },
+    "./runtime/defaults": {
+      "types": "./dist/runtime/defaults.d.ts",
+      "import": "./dist/runtime/defaults.js",
+      "default": "./dist/runtime/defaults.js"
+    },
+    "./runtime/engine": {
+      "types": "./dist/runtime/engine.d.ts",
+      "import": "./dist/runtime/engine.js",
+      "default": "./dist/runtime/engine.js"
+    },
+    "./runtime/model": {
+      "types": "./dist/runtime/model.d.ts",
+      "import": "./dist/runtime/model.js",
+      "default": "./dist/runtime/model.js"
+    },
+    "./providers/openai-compatible": {
+      "types": "./dist/providers/openai-compatible.d.ts",
+      "import": "./dist/providers/openai-compatible.js",
+      "default": "./dist/providers/openai-compatible.js"
+    },
+    "./runtime/sequential": {
+      "types": "./dist/runtime/sequential.d.ts",
+      "import": "./dist/runtime/sequential.js",
+      "default": "./dist/runtime/sequential.js"
+    },
+    "./runtime/shared": {
+      "types": "./dist/runtime/shared.d.ts",
+      "import": "./dist/runtime/shared.js",
+      "default": "./dist/runtime/shared.js"
+    },
+    "./runtime/termination": {
+      "types": "./dist/runtime/termination.d.ts",
+      "import": "./dist/runtime/termination.js",
+      "default": "./dist/runtime/termination.js"
+    },
+    "./runtime/tools": {
+      "types": "./dist/runtime/tools.d.ts",
+      "import": "./dist/runtime/tools.js",
+      "default": "./dist/runtime/tools.js"
+    }
+  },
+  "files": [
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "dist/types.js",
+    "dist/types.js.map",
+    "dist/types.d.ts",
+    "dist/types.d.ts.map",
+    "dist/browser/index.js",
+    "dist/browser/index.js.map",
+    "dist/browser/index.d.ts",
+    "dist/browser/index.d.ts.map",
+    "dist/providers/openai-compatible.js",
+    "dist/providers/openai-compatible.js.map",
+    "dist/providers/openai-compatible.d.ts",
+    "dist/providers/openai-compatible.d.ts.map",
+    "dist/runtime/*.js",
+    "dist/runtime/*.js.map",
+    "dist/runtime/*.d.ts",
+    "dist/runtime/*.d.ts.map",
+    "src/index.ts",
+    "src/types.ts",
+    "src/browser/index.ts",
+    "src/providers/openai-compatible.ts",
+    "src/runtime/*.ts",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && vite build --config vite.browser.config.ts",
+    "browser:smoke": "pnpm run build && vitest run src/tests/browser-bundle-smoke.test.ts",
+    "package:artifacts": "node scripts/check-package-artifacts.mjs",
+    "consumer:smoke": "node scripts/consumer-import-smoke.mjs",
+    "quickstart:smoke": "node scripts/consumer-import-smoke.mjs",
+    "package:identity": "node scripts/check-package-identity.mjs",
+    "package:sourcemaps": "node scripts/check-pack-sourcemaps.mjs",
+    "pack:check": "pnpm run package:identity && pnpm run build && pnpm run package:artifacts && pnpm run quickstart:smoke -- --skip-build && pnpm run package:sourcemaps && npm pack --dry-run --cache ./.npm-cache",
+    "publish:check": "pnpm run verify && pnpm run package:artifacts && npm publish --dry-run --cache ./.npm-cache",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "verify": "pnpm run package:identity && pnpm run build && pnpm run package:artifacts && pnpm run quickstart:smoke -- --skip-build && pnpm run typecheck && pnpm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ai": ">=5.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

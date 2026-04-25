@@ -1,0 +1,183 @@
+goal: >
+  Ship the dogpile TypeScript AI orchestration SDK as v1.0 to public npm
+  under the scoped name @dogpile/sdk, closing seven production-readiness
+  gaps with code, tests, CI, and documentation that match the SDK's
+  advertised capabilities.
+
+task_type: code
+
+constraints:
+  - 'Publish under scoped npm name "@dogpile/sdk" (the bare name `dogpile` is taken)'
+  - "No 0.x deprecation cycle — clean v1 break, document breaks in CHANGELOG only"
+  - "Supported runtimes are Node LTS 22 / 24, Bun (latest), and browser ESM bundle only"
+  - "Do NOT claim or test Cloudflare Workers or Vercel Edge support in v1"
+  - "Do NOT bundle a model pricing table; costUsd is computed from a user-supplied table"
+  - "Do NOT ship native OpenAI or Anthropic adapters in v1 (Vercel AI adapter only)"
+  - "Internal hot loops (e.g. src/runtime/sequential.ts protocol runners) stay trusting — no per-iteration validation"
+  - "Source maps and original sources must be published in the npm tarball"
+
+acceptance_criteria:
+  - >
+    AC1-identity: package.json `name` is "@dogpile/sdk"; README install
+    snippets, CI smoke tests, and dist tarball references all use the
+    scoped name.
+  - >
+    AC2-vercel-adapter: A `createVercelAIProvider()` factory exists,
+    mapping text, usage (input/output tokens), finish reason, and tool
+    calls from a Vercel AI provider. Has unit tests and at least one
+    integration test against a real Vercel AI provider call. Documented
+    in README.
+  - >
+    AC3-cancellation: `ModelRequest` has an optional `signal:
+    AbortSignal`; `run` and `runStream` accept `signal`; provider calls
+    receive and honor the signal so an abort cancels the in-flight HTTP
+    request; `StreamHandle.cancel()` aborts the underlying run; budget
+    `timeoutMs` uses an internal AbortController and aborts in-flight
+    calls. Covered by tests that assert the underlying fetch is aborted.
+  - >
+    AC4-runtime-matrix: CI runs the test suite on Node 22 and 24, and
+    Bun (latest), plus a browser ESM bundle smoke job. CI also runs
+    `pack:check` and a consumer-import smoke (fresh project installs the
+    packed tarball and runs the documented quickstart). All required
+    jobs are green on the release commit. README runtime claims list
+    only Node, Bun, and browser.
+  - >
+    AC5-surface-freeze: Demo, benchmark, and deterministic testing
+    helpers are removed from `src/index.ts` root re-exports and removed
+    from the package.json `exports` map. They remain reachable only via
+    an internal entry used by the project's own tests/docs. `pack:check`
+    confirms they are not in the published surface.
+  - >
+    AC6-errors-and-validation: A typed `DogpileError` union with stable
+    string `code` discriminants is exported. Public boundary entry
+    points (`run`, `runStream`, tool registration, provider
+    registration) validate caller-supplied config and throw typed
+    `DogpileError` on bad input. Tool-level `validateInput` remains
+    optional but is documented. Covered by tests that assert each error
+    code on bad input.
+  - >
+    AC7-source-maps: tsconfig.build.json keeps `declarationMap` and
+    `sourceMap` enabled; package.json `files` includes `**/*.map` and
+    `src/**`; the published tarball resolves source-map references in
+    dist/*.d.ts and dist/*.js. Verified by `pack:check` plus a smoke
+    test that resolves a source-map reference in the installed tarball.
+  - >
+    AC-release: A dry-run publish using `pnpm pack` produces a tarball
+    that installs cleanly into a fresh consumer project, and the README
+    quickstart runs end-to-end against that install. Each of the 7 gaps
+    has a CHANGELOG entry under v1.0.0.
+
+ontology_schema:
+  name: DogpileV1Release
+  description: >
+    Domain model for the dogpile SDK v1.0.0 production-readiness release.
+  fields:
+    - name: package_name
+      type: string
+      description: Scoped npm package name (@dogpile/sdk)
+    - name: gaps
+      type: array
+      description: The seven production-readiness gaps being closed
+    - name: gap_id
+      type: string
+      description: Stable identifier (G1..G7)
+    - name: gap_title
+      type: string
+      description: Short human-readable name
+    - name: gap_decision
+      type: string
+      description: The chosen resolution for this gap
+    - name: gap_touched_files
+      type: array
+      description: Files known to be modified to close the gap
+    - name: gap_tests
+      type: array
+      description: Test artifacts that prove the gap is closed
+    - name: supported_runtimes
+      type: array
+      description: Runtimes committed to in v1 (Node 22/24, Bun, browser ESM)
+    - name: dropped_runtimes
+      type: array
+      description: Runtimes removed from claims (Cloudflare Workers, Vercel Edge)
+    - name: error_codes
+      type: array
+      description: Stable string discriminants for the DogpileError union
+    - name: ci_jobs
+      type: array
+      description: CI matrix jobs required green for release
+    - name: changelog_entries
+      type: array
+      description: One CHANGELOG line per gap under v1.0.0
+
+evaluation_principles:
+  - name: capabilities_backed_by_tests
+    description: >
+      Advertised capabilities must be backed by tests. Cost accounting,
+      cancellation, and runtime support are all currently claimed in the
+      README without proof. The release is judged on whether every
+      public claim has a test or CI job behind it.
+    weight: 0.25
+  - name: intentional_public_surface
+    description: >
+      Public surface is intentional, not accidental. Demo, benchmark,
+      and testing helpers leaking into the root index and exports map
+      are the main source of long-tail semver risk. The v1 surface must
+      be exactly what is documented — nothing more.
+    weight: 0.20
+  - name: end_to_end_cancellation
+    description: >
+      Cancellation is end-to-end, not cosmetic. AbortSignal that does
+      not actually abort the in-flight HTTP call is worse than no signal
+      at all. Tests must assert the underlying fetch is aborted, not
+      just that the SDK's outer promise rejects.
+    weight: 0.20
+  - name: typed_stable_errors
+    description: >
+      Errors are typed and stable. JS consumers and downstream tools
+      depend on stable string codes for retry/observability. The
+      DogpileError code set is part of the v1 API contract.
+    weight: 0.15
+  - name: reproducible_release
+    description: >
+      Release is reproducible from a fresh machine. `pnpm pack` artifact
+      installing cleanly into a fresh consumer project is the only
+      ground-truth check that packaging, exports map, and source maps
+      are wired correctly.
+    weight: 0.10
+  - name: scope_discipline
+    description: >
+      Scope discipline — defer non-blockers. Native OpenAI/Anthropic
+      adapters, bundled pricing tables, and Workers/Edge support are
+      explicitly out of scope. Work that drifts into these areas should
+      be rejected, not absorbed.
+    weight: 0.10
+
+exit_conditions:
+  - name: all_acs_passed
+    description: All seven acceptance criteria (AC1..AC7) marked passed with linked PRs.
+    criteria: AC1..AC7 each have an associated PR/commit and tests are green.
+  - name: release_ac_passed
+    description: "AC-release passed: `pnpm pack` tarball installs into fresh consumer + quickstart runs."
+    criteria: Tarball install succeeds in a clean project and quickstart runs end-to-end.
+  - name: ci_matrix_green
+    description: "CI matrix green on the release commit (Node 22/24 + Bun + browser ESM smoke + pack:check + consumer-import smoke)."
+    criteria: All required CI jobs report success on the release commit.
+  - name: changelog_committed
+    description: CHANGELOG v1.0.0 section committed with one entry per gap.
+    criteria: CHANGELOG.md contains a v1.0.0 section with seven entries (one per gap).
+  - name: published_to_npm
+    description: "`@dogpile/sdk` v1.0.0 published to npm and `npm view @dogpile/sdk version` returns 1.0.0."
+    criteria: "`npm view @dogpile/sdk version` returns 1.0.0."
+
+out_of_scope:
+  - Native OpenAI provider adapter
+  - Native Anthropic provider adapter
+  - Bundled model pricing table
+  - Cloudflare Workers runtime support
+  - Vercel Edge runtime support
+  - Deprecation cycle / 0.x compatibility shim for the old `dogpile` name
+
+metadata:
+  version: "1.0.0"
+  ambiguity_score: 0.15
+  interview_id: null

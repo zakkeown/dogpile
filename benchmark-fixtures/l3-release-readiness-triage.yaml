@@ -1,0 +1,167 @@
+id: l3-release-readiness-triage
+level: L3
+paper_ref: arXiv:2603.28990v1
+title: Release readiness triage from conflicting project evidence
+purpose: >
+  Exercise the paper's claim that Sequential coordination is better suited than
+  Coordinator coordination for complex tasks that require multiple independent
+  reasoning passes, contradiction handling, and synthesis into an actionable
+  final artifact.
+reproduction_hypothesis: >
+  On this fixture, Sequential should score higher than Coordinator on evidence
+  coverage, contradiction handling, and actionability when run with the same
+  agent count, model, temperature, and budget caps.
+input_prompt: |
+  You are reviewing whether a TypeScript SDK is ready for a public v1 release.
+  Use only the evidence below. Produce a release-readiness memo for the maintainer.
+
+  Evidence packet:
+  - README claims all four protocols, Coordinator, Sequential, Broadcast, and
+    Shared, are production ready.
+  - The public API exports run(), stream(), createEngine(), and benchmark().
+  - The trace contract requires every run to emit role-assignment, agent-turn,
+    broadcast, tool-call, tool-result, judge-score, budget-stop, and final events
+    when those moments occur.
+  - Unit tests cover Sequential and Broadcast happy paths.
+  - No tests currently cover Coordinator budget-stop behavior.
+  - Shared protocol tests use a mock memory object and do not prove
+    JSON-serializable replay.
+  - The browser bundle imports no fs, child_process, net, or path modules.
+  - The package is licensed Apache-2.0.
+  - package.json declares "engines": { "node": ">=22" }.
+  - A paper reproduction report exists, but it only compares Sequential and
+    Coordinator on one smoke task with one model and one seed.
+  - The cost estimator stops before maxUsd in synthetic tests, but live provider
+    token accounting is marked TODO.
+  - The README includes three usage examples, but none show custom tools.
+
+  Required decision:
+  Decide whether the SDK should ship v1 now, ship an explicit release candidate,
+  or block the release. Explain the decision using concrete evidence.
+required_artifacts:
+  - name: release_decision
+    type: enum
+    allowed_values:
+      - ship_v1
+      - ship_rc
+      - block_release
+    description: Final release recommendation.
+  - name: evidence_table
+    type: markdown_table
+    description: >
+      Table with at least six evidence rows. Each row must classify the evidence
+      as supports release, blocks release, or requires follow-up.
+  - name: contradiction_analysis
+    type: prose
+    description: >
+      Explanation of at least two tensions between claims and evidence, including
+      the README production-ready claim versus missing Coordinator and Shared
+      verification.
+  - name: remediation_plan
+    type: ordered_list
+    description: >
+      Prioritized next steps that would make the release acceptable. Must include
+      Coordinator budget-stop coverage, Shared replay proof, reproduction report
+      expansion, and live provider token accounting.
+  - name: final_memo
+    type: prose
+    description: Maintainer-facing summary in 250 words or fewer.
+scoring_rubric:
+  max_score: 100
+  success_metric:
+    name: weighted_release_readiness_score
+    primary_comparison: sequential_score_minus_coordinator_score
+    unit: points
+    description: >
+      Score each protocol output from 0 to 100 by summing the weighted rubric
+      dimensions below. The reproduction succeeds when Sequential clears its
+      quality floor, Coordinator clears its baseline floor, and Sequential beats
+      Coordinator by the required margin under the deterministic setup.
+    success_conditions:
+      - "Coordinator score >= expected_floor.coordinator_score"
+      - "Sequential score >= expected_floor.sequential_score"
+      - "Sequential score - Coordinator score >= expected_floor.sequential_margin_over_coordinator"
+    tie_breakers:
+      - "Prefer the output with the stronger contradiction_handling score."
+      - "If still tied, prefer the output with the stronger actionability score."
+      - "If still tied, prefer the output with the lower total token count."
+    automatic_failure_conditions:
+      - "Uses facts outside the evidence packet as release-readiness evidence."
+      - "Omits the release_decision artifact."
+      - "Recommends ship_v1 while leaving blocker evidence unresolved."
+  dimensions:
+    - name: evidence_coverage
+      weight: 25
+      description: Uses the full evidence packet rather than cherry-picking.
+      scoring:
+        full_credit: "23-25: References at least 10 evidence facts, including positive release evidence and all named gaps."
+        partial_credit: "12-22: References 6-9 evidence facts or misses one major gap while staying grounded."
+        minimal_credit: "1-11: References fewer than 6 evidence facts or relies mostly on generic release concerns."
+        no_credit: "0: Ignores the packet or fabricates material evidence."
+    - name: contradiction_handling
+      weight: 25
+      description: Identifies and resolves claim-versus-evidence tensions.
+      scoring:
+        full_credit: "23-25: Explains at least two concrete tensions and resolves their severity in the final recommendation."
+        partial_credit: "12-22: Identifies at least two tensions but leaves severity or release impact under-explained."
+        minimal_credit: "1-11: Mentions only one tension or treats contradictions as a flat checklist."
+        no_credit: "0: Does not identify claim-versus-evidence contradictions."
+    - name: release_judgment
+      weight: 20
+      description: Chooses ship_v1, ship_rc, or block_release with justified severity.
+      scoring:
+        full_credit: "18-20: Selects ship_rc or block_release and ties the severity to concrete verification gaps."
+        partial_credit: "10-17: Selects a plausible decision but under-justifies severity or ignores mitigating evidence."
+        minimal_credit: "1-9: Gives an ambiguous or weakly supported recommendation."
+        no_credit: "0: Omits the decision or recommends ship_v1 despite unresolved blocker evidence."
+    - name: actionability
+      weight: 20
+      description: Gives concrete, prioritized remediation steps.
+      scoring:
+        full_credit: "18-20: Provides ordered remediation covering Coordinator budget-stop coverage, Shared replay proof, reproduction expansion, and live provider token accounting."
+        partial_credit: "10-17: Provides useful remediation but misses one required item or lacks prioritization."
+        minimal_credit: "1-9: Gives generic next steps with little connection to fixture evidence."
+        no_credit: "0: Provides no actionable remediation plan."
+    - name: format_compliance
+      weight: 10
+      description: Produces all required artifacts in the requested shapes.
+      scoring:
+        full_credit: "9-10: Includes release_decision, evidence_table with at least six rows, contradiction_analysis, ordered remediation_plan, and <=250 word final_memo."
+        partial_credit: "5-8: Includes all artifacts but one has a shape or length defect."
+        minimal_credit: "1-4: Omits one or two artifacts or substantially violates requested shapes."
+        no_credit: "0: Omits three or more required artifacts."
+expected_floor:
+  coordinator_score: 70
+  sequential_score: 80
+  sequential_margin_over_coordinator: 5
+deterministic_setup:
+  model_temperature: 0
+  agent_count: 4
+  max_turns_per_agent: 2
+  protocols_under_comparison:
+    - coordinator
+    - sequential
+  same_model_required: true
+  same_prompt_required: true
+  tool_access: disabled
+  external_network: disabled
+  random_seed: 260328990
+  budget_caps:
+    max_usd: 1.00
+    max_output_tokens: 2500
+    max_total_tokens: 12000
+  judge:
+    mode: deterministic_rubric
+    adjudication: >
+      Judge each artifact against the scoring_rubric using only the fixture
+      prompt, required artifacts, and produced answer. Do not grant credit for
+      claims that are not grounded in the evidence packet.
+trace_expectations:
+  required_event_kinds:
+    - role-assignment
+    - agent-turn
+    - judge-score
+    - final
+  conditional_event_kinds:
+    - budget-stop
+  serializable_trace_required: true

@@ -1,0 +1,127 @@
+goal: >
+  Design and implement a TypeScript SDK that lets developers run multi-agent LLM
+  workflows by supplying an intent (mission), a coordination protocol, and a
+  budget/cost tier — and receive the final output, a streaming event log, and a
+  full transcript in a single call. The SDK is grounded in arXiv 2603.28990v1
+  ("Drop the Hierarchy and Roles") and exposes both a high-level ergonomic
+  surface and a low-level researcher escape hatch.
+
+constraints:
+  - "Language: TypeScript, strict mode"
+  - "Model layer: Vercel AI SDK ('ai' package) for multi-provider abstraction"
+  - "Runtimes supported at v1: Node LTS 22 / 24, Bun, and browser ESM"
+  - "Pure-TS only: no Node-only deps, fetch-based I/O, no fs or child_process in core"
+  - "License: Apache-2.0"
+  - "Stateless core: trace must be JSON-serializable for caller-managed replay"
+  - "No built-in storage: SDK must not require disk, SQLite, or any session store"
+  - "All 4 protocols (Coordinator, Sequential, Broadcast, Shared) must be runnable end-to-end at v1"
+  - "No 'any' in public TypeScript surface; protocol, tier, and event types are discriminated unions"
+
+acceptance_criteria:
+  - "All 4 protocols (Coordinator, Sequential, Broadcast, Shared) run end-to-end against a test mission with a configured model provider"
+  - "Reproduce one paper result on a benchmark task (e.g., Sequential outperforms Coordinator on an L2 or L3 task)"
+  - "Public API documented (tsdoc + README + at least 3 usage examples) and npm-publishable with semver"
+  - "Streaming + trace UI demo app shows role-assignment, agent-turn, broadcast, and final events live"
+  - "Single call returns { output, trace, cost, quality } and yields streaming events when invoked via stream()"
+  - "Composable termination: caller can supply firstOf(budget, convergence, judge) and whichever fires first wins"
+  - "Built-in tools (web search, code exec) and user-supplied tools (Vercel AI tool schema) both work in any protocol"
+  - "Trace produced by run() can be replayed by a caller and is deterministic when temperature equals 0"
+  - "Type definitions exported; no 'any' in public surface"
+
+ontology_schema:
+  name: AgentProtocolsSDK
+  description: Core domain model for the multi-agent protocol SDK
+  fields:
+    - name: intent
+      type: string
+      description: Mission directive given to the agent collective
+    - name: protocol
+      type: enum
+      description: Coordination strategy. One of coordinator, sequential, broadcast, shared.
+    - name: tier
+      type: enum
+      description: Named budget preset. One of fast, balanced, quality.
+    - name: budget
+      type: object
+      description: Composed budget — tier, optional maxUsd, optional maxTokens, optional qualityWeight in 0..1
+    - name: agents
+      type: array
+      description: Optional AgentSpec list. When omitted, SDK auto-spawns N homogeneous agents per the paper.
+    - name: tools
+      type: object
+      description: Map of tool name to Vercel AI SDK tool definition. Built-in tools (webSearch, codeExec) plus user-supplied.
+    - name: terminate
+      type: object
+      description: Termination condition. budget, convergence, judge, or firstOf composing them.
+    - name: result
+      type: object
+      description: RunResult with output (string), trace (serializable), cost (usd + tokens), and optional quality score
+    - name: trace
+      type: object
+      description: Replayable JSON record of the run — events array plus protocol, model, agentsUsed
+    - name: events
+      type: array
+      description: Stream of RunEvent — role-assignment, agent-turn, broadcast, tool-call, tool-result, judge-score, final
+
+evaluation_principles:
+  - name: paper_faithfulness
+    weight: 0.25
+    description: All 4 protocols behave per the paper's definitions; Sequential empirically outperforms Coordinator on the chosen reproduction task
+  - name: api_ergonomics
+    weight: 0.20
+    description: High-level call works in 5 lines or fewer; low-level escape hatch exposes every primitive
+  - name: runtime_portability
+    weight: 0.15
+    description: Same code runs in Node, Bun, Browser, and Edge with no conditional imports
+  - name: observability
+    weight: 0.15
+    description: Streaming events plus serializable trace cover every coordination moment (role choice, turn, broadcast, tool, final)
+  - name: cost_control
+    weight: 0.15
+    description: Composed budget (tier + caps + quality weight) reliably halts runs before cap breach
+  - name: type_safety
+    weight: 0.10
+    description: No 'any' in public types; protocol, tier, and event unions are discriminated
+
+exit_conditions:
+  - name: acceptance_criteria_pass
+    description: All acceptance_criteria checked and passing
+    criteria: Every item in acceptance_criteria has been verified by the evaluator
+  - name: paper_reproduction_committed
+    description: Paper reproduction artifact committed to repo
+    criteria: A benchmark report comparing all 4 protocols on at least one L2 or L3 task is committed at /benchmark-fixtures/paper-reproduction.md
+  - name: npm_published
+    description: npm package published under Apache-2.0 with documented public API
+    criteria: package.json declares Apache-2.0, README documents public API with 3+ examples, and tsdoc covers all exported types
+  - name: example_app_runnable
+    description: Example app demonstrating streaming + trace UI runnable locally
+    criteria: examples/trace-ui directory contains a runnable app that subscribes to stream() and renders role-assignment, agent-turn, broadcast, and final events
+
+metadata:
+  version: 0.1.0
+  ambiguity_score: 0.18
+  paper_ref: "arXiv:2603.28990v1"
+  paper_title: "Drop the Hierarchy and Roles"
+  source: direct interview (MCP unavailable; reconstructed from conversation transcript)
+
+notes:
+  public_api:
+    high_level:
+      - "run({ intent, protocol, tier, tools }): Promise<RunResult>"
+      - "stream({ intent, protocol, tier, tools }): AsyncIterable<RunEvent> with .result: Promise<RunResult>"
+    low_level:
+      - "createEngine({ protocol, agents, model, budget, terminate, tools }): Engine"
+      - "engine.run(intent): Promise<RunResult>"
+      - "engine.stream(intent): AsyncIterable<RunEvent>"
+    helpers:
+      - "protocols.{coordinator, sequential, broadcast, shared}"
+      - "firstOf(...conditions), budget(...), convergence(...), judge({ model, rubric })"
+      - "tiers.{fast, balanced, quality} — overridable presets"
+      - "tools.{webSearch, codeExec} — built-in tools"
+    benchmark_mode:
+      - "benchmark({ tasks, protocols, models }): BenchmarkReport — reproduces paper L1–L4 evaluation"
+  deferred_decisions:
+    - npm package name and scope
+    - concrete tier-to-model mapping (working defaults to validate; tunable later)
+    - built-in tool implementations (search provider, code-exec sandbox strategy — may slip to v1.1)
+    - whether benchmark mode ships in core package or separate @scope/bench package
