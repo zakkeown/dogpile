@@ -700,7 +700,7 @@ function oneLine(text) {
 }
 
 function escapeTable(text) {
-  return text.replace(/\|/gu, "\\|");
+  return text.split("|").join("\\|");
 }
 
 function titleCase(text) {
