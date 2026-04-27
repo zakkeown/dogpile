@@ -7,6 +7,9 @@ on:
       - main
       - "release/**"
 
+permissions:
+  contents: read
+
 jobs:
   package-identity:
     name: Scoped package identity

@@ -879,7 +879,10 @@ describe("package exports", () => {
 
         expect(execError.code).toBe(1);
         expect(execError.stderr).toContain("Package identity check failed");
-        expect(execError.stderr).toContain("README.md:1:1 uses stale unscoped bare npm install command");
+        expect(execError.stderr).toContain([
+          "README.md:1:13 uses stale unscoped bare npm install command:",
+          "dogpile"
+        ].join(" "));
       }
     } finally {
       await rm(tempDir, { force: true, recursive: true });

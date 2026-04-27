@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Prepared the security patch release identity for `@dogpile/sdk@0.2.1` and `dogpile-sdk-0.2.1.tgz`.
+- Added explicit read-only GitHub Actions workflow permissions for release validation jobs.
+- Reworked package identity command scanning to avoid ReDoS-prone install command regexes.
+- Hardened the Hugging Face upload GUI example's markdown table escaping.
+
 ## 0.2.0
 
 - Prepared the Snow Leopard hardening release identity for `@dogpile/sdk@0.2.0` and `dogpile-sdk-0.2.0.tgz`.

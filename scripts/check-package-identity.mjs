@@ -60,22 +60,29 @@ const staleReferencePatterns = [
   {
     label: "bare require import",
     pattern: /\brequire\s*\(\s*["']dogpile(?:\/[^"']*)?["']\s*\)/g
-  },
+  }
+];
+
+const staleCommandReferences = [
   {
     label: "bare npm install command",
-    pattern: /\bnpm\s+(?:install|i)\s+(?:--?[A-Za-z0-9-]+(?:[=\s][^\s]+)?\s+)*dogpile(?:@[^\s]+)?(?=\s|$)/g
+    command: "npm",
+    verbs: new Set(["install", "i"])
   },
   {
     label: "bare pnpm add command",
-    pattern: /\bpnpm\s+add\s+(?:--?[A-Za-z0-9-]+(?:[=\s][^\s]+)?\s+)*dogpile(?:@[^\s]+)?(?=\s|$)/g
+    command: "pnpm",
+    verbs: new Set(["add"])
   },
   {
     label: "bare yarn add command",
-    pattern: /\byarn\s+add\s+(?:--?[A-Za-z0-9-]+(?:[=\s][^\s]+)?\s+)*dogpile(?:@[^\s]+)?(?=\s|$)/g
+    command: "yarn",
+    verbs: new Set(["add"])
   },
   {
     label: "bare bun add command",
-    pattern: /\bbun\s+add\s+(?:--?[A-Za-z0-9-]+(?:[=\s][^\s]+)?\s+)*dogpile(?:@[^\s]+)?(?=\s|$)/g
+    command: "bun",
+    verbs: new Set(["add"])
   }
 ];
 
@@ -125,6 +132,8 @@ async function main() {
         findings.push(`${relativePath}:${location.line}:${location.column} uses stale unscoped ${label}: ${match[0]}`);
       }
     }
+
+    findings.push(...findStaleCommandReferences(contents, relativePath));
   }
 
   if (findings.length > 0) {
@@ -229,6 +238,96 @@ function shouldScanFile(fileName) {
   }
 
   return /\.(?:c?js|mjs|ts|tsx|json|md|ya?ml)$/.test(fileName);
+}
+
+function findStaleCommandReferences(contents, relativePath) {
+  const findings = [];
+  const lines = contents.split("\n");
+
+  for (const [lineIndex, line] of lines.entries()) {
+    const tokens = tokenizeShellLine(line);
+
+    for (const { label, command, verbs } of staleCommandReferences) {
+      for (let tokenIndex = 0; tokenIndex < tokens.length - 1; tokenIndex += 1) {
+        if (tokens[tokenIndex].value !== command || !verbs.has(tokens[tokenIndex + 1].value)) {
+          continue;
+        }
+
+        for (const token of tokens.slice(tokenIndex + 2)) {
+          const value = trimTokenPunctuation(token.value);
+
+          if (isBareDogpilePackage(value)) {
+            findings.push(
+              `${relativePath}:${lineIndex + 1}:${token.column} uses stale unscoped ${label}: ${value}`
+            );
+          }
+        }
+      }
+    }
+  }
+
+  return findings;
+}
+
+function tokenizeShellLine(line) {
+  const tokens = [];
+  let token = "";
+  let tokenColumn = 1;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+
+    if (char === " " || char === "\t") {
+      if (token) {
+        tokens.push({ value: token, column: tokenColumn });
+        token = "";
+      }
+      continue;
+    }
+
+    if (!token) {
+      tokenColumn = index + 1;
+    }
+
+    token += char;
+  }
+
+  if (token) {
+    tokens.push({ value: token, column: tokenColumn });
+  }
+
+  return tokens;
+}
+
+function trimTokenPunctuation(token) {
+  let start = 0;
+  let end = token.length;
+
+  while (start < end && isTokenPunctuation(token[start])) {
+    start += 1;
+  }
+
+  while (end > start && isTokenPunctuation(token[end - 1])) {
+    end -= 1;
+  }
+
+  return token.slice(start, end);
+}
+
+function isTokenPunctuation(char) {
+  return char === "`" ||
+    char === "\"" ||
+    char === "'" ||
+    char === "," ||
+    char === "." ||
+    char === ";" ||
+    char === ")";
+}
+
+function isBareDogpilePackage(token) {
+  return token === "dogpile" ||
+    token.startsWith("dogpile@") ||
+    token.startsWith("dogpile/");
 }
 
 function getLocation(contents, index) {
