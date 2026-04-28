@@ -255,10 +255,12 @@ const provider = createOpenAICompatibleProvider({
 - [Developer usage guide](https://github.com/bubstack/dogpile/blob/main/docs/developer-usage.md):
   deeper API choices, providers, protocols, streaming, termination, tools,
   replay, errors, browser usage, and repo commands.
-- [API and trace reference](docs/reference.md): provider contracts,
+- [API and trace reference](https://github.com/bubstack/dogpile/blob/main/docs/reference.md):
+  provider contracts,
   OpenAI-compatible mapping, runtime tool validation, errors, result shapes, and
   replay traces.
-- [Release and package guide](docs/release.md): versioning, packed tarball
+- [Release and package guide](https://github.com/bubstack/dogpile/blob/main/docs/release.md):
+  versioning, packed tarball
   checks, release validation, CI status checks, and npm publishing.
 - [Examples](examples/README.md): repeatable protocol comparison and live
   OpenAI-compatible execution.

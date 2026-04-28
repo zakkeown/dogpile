@@ -332,10 +332,11 @@ describe("package exports", () => {
   });
 
   it("wires the fresh consumer tarball smoke to verify public subpath imports and type resolution", async () => {
-    const [manifest, smokeScript, readme, changelog] = await Promise.all([
+    const [manifest, smokeScript, readme, releaseDocs, changelog] = await Promise.all([
       readManifest(),
       readFile(join(rootDir, "scripts", "consumer-import-smoke.mjs"), "utf8"),
       readFile(join(rootDir, "README.md"), "utf8"),
+      readFile(join(rootDir, "docs", "release.md"), "utf8"),
       readFile(join(rootDir, "CHANGELOG.md"), "utf8")
     ]);
 
@@ -358,21 +359,21 @@ describe("package exports", () => {
     expect(smokeScript).toContain("runtime/engine");
     expect(smokeScript).toContain("providers/openai-compatible");
     expect(smokeScript).toContain("browser");
-    expect(readme).toContain("resolve `@dogpile/sdk` from the `.tgz` instead of `workspace:` or `link:` metadata");
-    expect(readme).toContain("do not resolve through local source imports");
+    expect(releaseDocs).toContain("resolve `@dogpile/sdk` from the `.tgz` instead of `workspace:` or `link:` metadata");
+    expect(releaseDocs).toContain("do not resolve through local source imports");
     expect(changelog).toContain("reject `workspace:` / `link:` SDK installs");
     expect(changelog).toContain("local source files");
-    expect(readme).toContain("imports every public package subpath from the installed tarball");
-    expect(readme).toContain("runs `tsc --noEmit` from the consumer project");
+    expect(releaseDocs).toContain("imports every public package subpath from the installed tarball");
+    expect(releaseDocs).toContain("runs `tsc --noEmit` from the consumer project");
     expect(changelog).toContain("import every public package subpath");
     expect(changelog).toContain("downstream TypeScript type resolution");
   });
 
   it("wires pack:check to reject packed private helper files", async () => {
     const manifest = await readManifest();
-    const [smokeScript, readme, changelog] = await Promise.all([
+    const [smokeScript, releaseDocs, changelog] = await Promise.all([
       readFile(join(rootDir, "scripts", "consumer-import-smoke.mjs"), "utf8"),
-      readFile(join(rootDir, "README.md"), "utf8"),
+      readFile(join(rootDir, "docs", "release.md"), "utf8"),
       readFile(join(rootDir, "CHANGELOG.md"), "utf8")
     ]);
 
@@ -382,7 +383,7 @@ describe("package exports", () => {
     expect(smokeScript).toContain("forbiddenHelperPackedFiles");
     expect(smokeScript).toContain("dist/benchmark/sequential.js");
     expect(smokeScript).toContain("src/testing/deterministic-provider.ts");
-    expect(readme).toContain("verifies private helper files are absent from the installed tarball");
+    expect(releaseDocs).toContain("verifies private helper files are absent from the installed tarball");
     expect(changelog).toContain("Removed demo, benchmark, deterministic testing, and internal helper files from the publishable tarball");
   });
 
@@ -857,6 +858,8 @@ describe("package exports", () => {
     const tempDir = await mkdtemp(join(tmpdir(), "dogpile-package-identity-"));
 
     try {
+      await mkdir(join(tempDir, "docs"), { recursive: true });
+
       await Promise.all([
         writeFile(join(tempDir, "package.json"), JSON.stringify({
           name: "@dogpile/sdk",
@@ -894,6 +897,8 @@ describe("package exports", () => {
     const tempDir = await mkdtemp(join(tmpdir(), "dogpile-release-identity-"));
 
     try {
+      await mkdir(join(tempDir, "docs"), { recursive: true });
+
       await Promise.all([
         writeFile(join(tempDir, "package.json"), JSON.stringify({
           name: releaseIdentity.packageName,
@@ -922,7 +927,8 @@ describe("package exports", () => {
             access: "public"
           }
         }, null, 2), "utf8"),
-        writeFile(join(tempDir, "README.md"), "@dogpile/sdk@0.1.2 dogpile-sdk-0.1.2.tgz\n", "utf8"),
+        writeFile(join(tempDir, "README.md"), "# Dogpile\n", "utf8"),
+        writeFile(join(tempDir, "docs", "release.md"), "@dogpile/sdk@0.1.2 dogpile-sdk-0.1.2.tgz\n", "utf8"),
         writeFile(join(tempDir, "CHANGELOG.md"), "## 0.1.2\n\n- @dogpile/sdk@0.1.2 dogpile-sdk-0.1.2.tgz\n", "utf8")
       ]);
 
@@ -939,7 +945,7 @@ describe("package exports", () => {
         const execError = error as { readonly code?: number; readonly stderr?: string };
 
         expect(execError.code).toBe(1);
-        expect(execError.stderr).toContain("README.md must include current release identity snippet");
+        expect(execError.stderr).toContain("docs/release.md must include current release identity snippet");
         expect(execError.stderr).toContain("CHANGELOG.md must include current release identity snippet");
         expect(execError.stderr).toContain(`${releaseIdentity.packageName}@${releaseIdentity.version}`);
         expect(execError.stderr).toContain(releaseIdentity.packFilename);
@@ -1024,41 +1030,46 @@ describe("package exports", () => {
   });
 
   it("documents release-blocking Node, Bun, browser, and package GitHub status checks", async () => {
-    const readme = await readFile(join(rootDir, "README.md"), "utf8");
+    const releaseDocs = await readFile(join(rootDir, "docs", "release.md"), "utf8");
 
-    expect(readme).toContain("Required CI Status Checks");
-    expect(readme).toContain("Release Validation / Required Node.js 22 full suite");
-    expect(readme).toContain("Release Validation / Required Node.js 24 full suite");
-    expect(readme).toContain("Release Validation / Required Bun latest full suite");
-    expect(readme).toContain("Release Validation / Required browser bundle smoke");
-    expect(readme).toContain("Release Validation / Required packed-tarball quickstart smoke");
-    expect(readme).toContain("Release Validation / Required pack:check package artifact");
-    expect(readme).toContain("Do not publish");
+    expect(releaseDocs).toContain("Required CI Status Checks");
+    expect(releaseDocs).toContain("Release Validation / Required Node.js 22 full suite");
+    expect(releaseDocs).toContain("Release Validation / Required Node.js 24 full suite");
+    expect(releaseDocs).toContain("Release Validation / Required Bun latest full suite");
+    expect(releaseDocs).toContain("Release Validation / Required browser bundle smoke");
+    expect(releaseDocs).toContain("Release Validation / Required packed-tarball quickstart smoke");
+    expect(releaseDocs).toContain("Release Validation / Required pack:check package artifact");
+    expect(releaseDocs).toContain("Do not publish");
   });
 
   it("scopes README runtime support to Node, Bun, and browser ESM only", async () => {
-    const readme = await readFile(join(rootDir, "README.md"), "utf8");
+    const [readme, releaseDocs] = await Promise.all([
+      readFile(join(rootDir, "README.md"), "utf8"),
+      readFile(join(rootDir, "docs", "release.md"), "utf8")
+    ]);
+    const docs = `${readme}\n${releaseDocs}`;
 
     expect(readme).toContain("supports only Node.js LTS 22 / 24, Bun latest, and browser ESM runtimes");
-    expect(readme).toContain(
+    expect(docs).toContain(
       "runtime portability guarantees for Node.js LTS 22 / 24, Bun latest, and browser ESM runtimes"
     );
-    expect(readme).toContain("supported Node.js, Bun, and browser ESM runtimes");
-    expect(readme).not.toMatch(/\b(?:Cloudflare|Workers?|Vercel Edge|Edge Runtime|Deno|serverless)\b/i);
+    expect(docs).toContain("supported Node.js, Bun, and browser ESM runtimes");
+    expect(docs).not.toMatch(/\b(?:Cloudflare|Workers?|Vercel Edge|Edge Runtime|Deno|serverless)\b/i);
   });
 
   it("documents the scoped npm install and release tarball identity", async () => {
-    const [releaseIdentity, readme, changelog] = await Promise.all([
+    const [releaseIdentity, readme, releaseDocs, changelog] = await Promise.all([
       readReleaseIdentity(),
       readFile(join(rootDir, "README.md"), "utf8"),
+      readFile(join(rootDir, "docs", "release.md"), "utf8"),
       readFile(join(rootDir, "CHANGELOG.md"), "utf8")
     ]);
 
     expect(readme).toContain("pnpm add @dogpile/sdk");
     expect(readme).toContain("npm install @dogpile/sdk");
     expect(readme).toContain("yarn add @dogpile/sdk");
-    expect(readme).toContain(`${releaseIdentity.packageName}@${releaseIdentity.version}`);
-    expect(readme).toContain(releaseIdentity.packFilename);
+    expect(releaseDocs).toContain(`${releaseIdentity.packageName}@${releaseIdentity.version}`);
+    expect(releaseDocs).toContain(releaseIdentity.packFilename);
     expect(changelog).toContain(`## ${releaseIdentity.version}`);
     expect(changelog).toContain(`${releaseIdentity.packageName}@${releaseIdentity.version}`);
     expect(changelog).toContain(releaseIdentity.packFilename);
@@ -1069,6 +1080,7 @@ describe("package exports", () => {
   it("does not document private demo, benchmark, deterministic testing, or internal helper package imports", async () => {
     const docs = await Promise.all([
       readFile(join(rootDir, "README.md"), "utf8"),
+      readFile(join(rootDir, "docs", "reference.md"), "utf8"),
       readFile(join(rootDir, "CHANGELOG.md"), "utf8"),
       readFile(join(rootDir, "benchmark-fixtures/paper-reproduction.md"), "utf8")
     ]);
