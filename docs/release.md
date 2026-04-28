@@ -41,22 +41,22 @@ pnpm run build
 pnpm pack --pack-destination ./packed
 ```
 
-The local tarball is named `dogpile-sdk-0.2.1.tgz` for the scoped package
-`@dogpile/sdk@0.2.1`. Install that tarball into a fresh consumer project:
+The local tarball is named `dogpile-sdk-0.2.2.tgz` for the scoped package
+`@dogpile/sdk@0.2.2`. Install that tarball into a fresh consumer project:
 
 ```sh
 mkdir ../dogpile-quickstart
 cd ../dogpile-quickstart
 pnpm init
-pnpm add ../dogpile/packed/dogpile-sdk-0.2.1.tgz
+pnpm add ../dogpile/packed/dogpile-sdk-0.2.2.tgz
 ```
 
 Equivalent install commands for other supported package managers are:
 
 ```sh
-npm install ../dogpile/packed/dogpile-sdk-0.2.1.tgz
-yarn add ../dogpile/packed/dogpile-sdk-0.2.1.tgz
-bun add ../dogpile/packed/dogpile-sdk-0.2.1.tgz
+npm install ../dogpile/packed/dogpile-sdk-0.2.2.tgz
+yarn add ../dogpile/packed/dogpile-sdk-0.2.2.tgz
+bun add ../dogpile/packed/dogpile-sdk-0.2.2.tgz
 ```
 
 ## Release Verification
@@ -102,8 +102,8 @@ What each gate proves:
   runs `npm publish --dry-run` so the package metadata, export map, and
   publishable files are checked without publishing.
 
-The release identity is `@dogpile/sdk@0.2.1`. A real `pnpm pack` or `npm pack`
-for this scoped package produces the local tarball `dogpile-sdk-0.2.1.tgz`;
+The release identity is `@dogpile/sdk@0.2.2`. A real `pnpm pack` or `npm pack`
+for this scoped package produces the local tarball `dogpile-sdk-0.2.2.tgz`;
 the dry-run package gate must report that tarball filename and the scoped npm
 package name before publish. See `CHANGELOG.md` for release notes and
 breaking-change documentation.

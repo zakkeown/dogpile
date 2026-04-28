@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+- Prepared the documentation refresh release identity for `@dogpile/sdk@0.2.2` and `dogpile-sdk-0.2.2.tgz`.
+- Reworked the README around the product value proposition, quickstart, and documentation map.
+- Split dense API, trace, and release details into dedicated docs pages.
+
 ## 0.2.1
 
 - Prepared the security patch release identity for `@dogpile/sdk@0.2.1` and `dogpile-sdk-0.2.1.tgz`.
