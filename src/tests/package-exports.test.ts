@@ -332,10 +332,9 @@ describe("package exports", () => {
   });
 
   it("wires the fresh consumer tarball smoke to verify public subpath imports and type resolution", async () => {
-    const [manifest, smokeScript, readme, releaseDocs, changelog] = await Promise.all([
+    const [manifest, smokeScript, releaseDocs, changelog] = await Promise.all([
       readManifest(),
       readFile(join(rootDir, "scripts", "consumer-import-smoke.mjs"), "utf8"),
-      readFile(join(rootDir, "README.md"), "utf8"),
       readFile(join(rootDir, "docs", "release.md"), "utf8"),
       readFile(join(rootDir, "CHANGELOG.md"), "utf8")
     ]);
