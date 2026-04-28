@@ -1,14 +1,10 @@
 # Changelog
 
-## 0.5.0
+## 0.3.0
 
-- Prepared the protocol-floor release identity for `@dogpile/sdk@0.5.0` and `dogpile-sdk-0.5.0.tgz`.
-- Added protocol-level `minTurns` / `minRounds` floors so convergence and judge termination cannot fire before the configured minimum progress.
-
-## 0.4.0
-
-- Prepared the wrap-up hint release identity for `@dogpile/sdk@0.4.0` and `dogpile-sdk-0.4.0.tgz`.
+- Prepared the minor release identity for `@dogpile/sdk@0.3.0` and `dogpile-sdk-0.3.0.tgz`.
 - Added one-shot `wrapUpHint` support so the next model turn can package work before hard iteration or timeout caps terminate the run.
+- Added protocol-level `minTurns` / `minRounds` floors so convergence and judge termination cannot fire before the configured minimum progress.
 
 ## 0.2.2
 
