@@ -26,7 +26,7 @@ describe("GitHub automation configuration", () => {
 
   it("publishes the npm package through trusted publishing after release gates", () => {
     const workflow = readRepoFile(".github/workflows/npm-publish.yml");
-    const readme = readRepoFile("README.md");
+    const releaseDocs = readRepoFile("docs/release.md");
     const changelog = readRepoFile("CHANGELOG.md");
 
     expect(workflow).toContain("name: Publish Package to npm");
@@ -48,10 +48,10 @@ describe("GitHub automation configuration", () => {
     expect(workflow).toContain("npm publish --dry-run --access public");
     expect(workflow).toContain("npm publish --access public");
 
-    expect(readme).toContain("Organization or user: `bubstack`");
-    expect(readme).toContain("Workflow filename: `npm-publish.yml`");
-    expect(readme).toContain("Environment name: `npm`");
-    expect(readme).toContain("npm Trusted Publishing/OIDC");
+    expect(releaseDocs).toContain("Organization or user: `bubstack`");
+    expect(releaseDocs).toContain("Workflow filename: `npm-publish.yml`");
+    expect(releaseDocs).toContain("Environment name: `npm`");
+    expect(releaseDocs).toContain("npm Trusted Publishing/OIDC");
     expect(changelog).toContain("Dependabot version-update configuration");
     expect(changelog).toContain("npm publish workflow");
   });

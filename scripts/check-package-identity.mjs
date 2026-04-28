@@ -167,7 +167,7 @@ async function readReleaseIdentity() {
 async function checkReleaseReferences({ expectedPackageName, expectedVersion, expectedPackFilename }) {
   const checks = [
     {
-      path: "README.md",
+      path: "docs/release.md",
       snippets: [
         `${expectedPackageName}@${expectedVersion}`,
         expectedPackFilename

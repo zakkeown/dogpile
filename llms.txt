@@ -1,0 +1,42 @@
+# Dogpile
+
+> `@dogpile/sdk` is a strict, provider-neutral TypeScript SDK that runs one mission through a multi-agent coordination protocol and returns a replayable trace. It owns the coordination loop (agent turns, protocol events, transcripts, cost aggregation, cancellation, termination, typed errors); it does not own credentials, pricing, storage, queues, or UI. Callers pass any object implementing `ConfiguredModelProvider` (`{ id, generate(request) }`) as the model boundary.
+
+The high-level entry is `Dogpile.pile({ intent, model, protocol, tier })`. Functional equivalents: `run`, `stream`, `createEngine`, `replay`, `replayStream`. Four first-party protocols (`sequential`, `broadcast`, `shared`, `coordinator`) return the same result/event shape — switching `protocol` does not change the contract. Inspired by arXiv 2603.28990 ("Drop the Hierarchy and Roles").
+
+Requires Node.js 22+. Pure-TS runtime: same code runs under Node 22/24, Bun latest, and browser ESM. No env reads, no filesystem in the runtime.
+
+## Docs
+
+- [README](README.md): install, quickstart, value prop, protocol summary
+- [Developer usage guide](docs/developer-usage.md): API choices, providers, protocols, streaming, termination, tools, replay, errors, browser usage
+- [API reference](docs/reference.md): exported types and functions
+- [Release notes](docs/release.md): release process and verification gates
+- [CHANGELOG](CHANGELOG.md): public-surface change log — event shapes, exports, termination semantics
+- [AGENTS.md](AGENTS.md): repository contributor guidelines
+- [CLAUDE.md](CLAUDE.md): architecture overview and cross-cutting invariants for AI assistants
+
+## Public API
+
+- [src/index.ts](src/index.ts): the only root export — `Dogpile`, `run`, `stream`, `createEngine`, `replay`, `replayStream`, `createOpenAICompatibleProvider`, public types
+- [package.json](package.json): subpath exports (`@dogpile/sdk/runtime/*`, `/types`, `/browser`, `/providers/openai-compatible`) and `files` allowlist — both are public surface
+
+## Runtime internals
+
+- [src/runtime/engine.ts](src/runtime/engine.ts): top-level orchestrator
+- [src/runtime/sequential.ts](src/runtime/sequential.ts), [broadcast.ts](src/runtime/broadcast.ts), [shared.ts](src/runtime/shared.ts), [coordinator.ts](src/runtime/coordinator.ts): the four protocols
+- [src/runtime/termination.ts](src/runtime/termination.ts): `budget`, `convergence`, `judge`, `firstOf`, `combineTerminationDecisions`
+- [src/runtime/tools.ts](src/runtime/tools.ts): runtime tool adapters and built-in tool identity/permissions
+- [src/runtime/model.ts](src/runtime/model.ts): `ConfiguredModelProvider` and model boundary types
+- [src/providers/openai-compatible.ts](src/providers/openai-compatible.ts): the one bundled, dependency-free provider adapter
+
+## Examples and testing helpers
+
+- [examples/README.md](examples/README.md): protocol comparison and live OpenAI-compatible runs
+- [src/testing/](src/testing/): published library of deterministic test helpers (e.g. deterministic provider) for SDK consumers
+- [src/benchmark/](src/benchmark/): published `./benchmark` export — paper-reproduction surface
+
+## Optional
+
+- [src/tests/](src/tests/): contract, integration, public-API-surface, packaging, browser-bundle, and smoke tests — the gates that protect the published contract
+- [benchmark-fixtures/](benchmark-fixtures/): repo-internal repro fixtures and paper-reproduction note (excluded from npm tarball)

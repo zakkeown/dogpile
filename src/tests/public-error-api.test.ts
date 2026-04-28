@@ -23,14 +23,14 @@ type DocumentedDogpileErrorCode = (typeof documentedDogpileErrorCodes)[number];
 type UndocumentedDogpileErrorCode = Exclude<DogpileErrorCode, DocumentedDogpileErrorCode>;
 
 describe("public DogpileError API", () => {
-  it("documents every exported DogpileError code in the README handling table", () => {
+  it("documents every exported DogpileError code in the reference handling table", () => {
     expectNoUndocumentedDogpileErrorCodes(true);
 
-    const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
-    expect(readme).toContain("## DogpileError Codes");
+    const reference = readFileSync(new URL("../../docs/reference.md", import.meta.url), "utf8");
+    expect(reference).toContain("## DogpileError Codes");
 
     for (const code of documentedDogpileErrorCodes) {
-      expect(readme).toContain(`| \`${code}\` |`);
+      expect(reference).toContain(`| \`${code}\` |`);
     }
   });
 

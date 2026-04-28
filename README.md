@@ -1,8 +1,19 @@
 # Dogpile
 
-Dogpile is a strict TypeScript SDK for turning one mission into a replayable multi-agent coordination run. It is inspired by arXiv 2603.28990v1, "Drop the Hierarchy and Roles", but it is packaged like an application SDK: bring your own model provider, pick a protocol, stream events if you need them, and persist the trace wherever your product already stores work.
+[![npm version](https://img.shields.io/npm/v/@dogpile/sdk?color=0f766e&label=npm)](https://www.npmjs.com/package/@dogpile/sdk)
+[![Release Validation](https://github.com/bubstack/dogpile/actions/workflows/release-validation.yml/badge.svg)](https://github.com/bubstack/dogpile/actions/workflows/release-validation.yml)
+[![Node.js >=22](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](package.json)
+[![TypeScript](https://img.shields.io/badge/types-TypeScript-3178c6?logo=typescript&logoColor=white)](src/index.ts)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![pnpm 10.33.0](https://img.shields.io/badge/pnpm-10.33.0-f69220?logo=pnpm&logoColor=white)](package.json)
 
-The useful bit is the contract. Dogpile does not own your credentials, pricing table, storage, queue, or UI. It owns the coordination loop: agent turns, protocol events, transcripts, cost aggregation, cancellation, termination policy, typed errors, and replayable result shapes.
+Dogpile is the TypeScript coordination layer for product teams that want
+multi-agent work without handing their application to an agent framework.
+
+Give Dogpile one mission and one model boundary. It runs a coordination
+protocol, records every turn, streams the run if you need a live UI, totals
+usage and cost, and hands back a replayable artifact your app can store
+wherever work already lives.
 
 ```ts
 import { Dogpile } from "@dogpile/sdk";
@@ -18,54 +29,57 @@ console.log(result.output);
 console.log(result.trace.events);
 ```
 
-## Research Basis
+Dogpile is useful when a single model answer is too brittle, but a full agent
+platform would own too much:
 
-Dogpile's protocol vocabulary and paper-faithfulness examples are based on:
+- release planning that needs a planner, critic, and synthesizer
+- policy or support workflows that need independent review before final text
+- product research where protocol choice should be visible and repeatable
+- eval harnesses that compare `sequential`, `broadcast`, `shared`, and
+  `coordinator` runs against the same mission
+- application features that need agent progress events, cancellation, budgets,
+  typed failures, and saved traces instead of a black-box response string
 
-Dochkina, V. (2026). *Drop the Hierarchy and Roles: How Self-Organizing LLM Agents Outperform Designed Structures*. arXiv:2603.28990 [cs.AI]. https://doi.org/10.48550/arXiv.2603.28990
+## The Contract
 
-```bibtex
-@misc{dochkina2026drop,
-  title = {Drop the Hierarchy and Roles: How Self-Organizing LLM Agents Outperform Designed Structures},
-  author = {Dochkina, Victoria},
-  year = {2026},
-  eprint = {2603.28990},
-  archivePrefix = {arXiv},
-  primaryClass = {cs.AI},
-  doi = {10.48550/arXiv.2603.28990},
-  url = {https://arxiv.org/abs/2603.28990}
-}
-```
+Dogpile keeps the coordination loop strict and leaves the rest with you.
 
-## Why Dogpile
+Dogpile owns:
 
-- **Provider-neutral by default.** Any object with `id` and `generate(request)` can be the model boundary.
-- **Four first-party protocols.** Use `sequential`, `broadcast`, `shared`, or `coordinator` without changing the result contract.
-- **Live when you need it.** `Dogpile.stream()` yields the same event shapes that land in the final trace.
-- **Replayable by construction.** Completed runs return a JSON-serializable trace with inputs, events, provider calls, transcript, accounting, and final output.
-- **Application-owned effects.** Runtime tools, web search, code execution, credentials, and persistence stay under caller policy.
-- **Small public surface.** The package exports the SDK root, browser entrypoint, runtime subpaths, type subpath, and OpenAI-compatible provider adapter.
+- agent turns, transcripts, protocol events, and final synthesis
+- first-party `sequential`, `broadcast`, `shared`, and `coordinator` protocols
+- streaming events that match the final trace
+- cancellation, timeouts, budgets, termination policy, and typed errors
+- JSON-serializable run artifacts for replay, audit, evals, and debugging
 
-## Documentation
+Your application owns:
 
-- [Developer usage guide](https://github.com/bubstack/dogpile/blob/main/docs/developer-usage.md): API choices, providers, protocols, streaming, termination, tools, replay, errors, browser usage, and repo commands.
-- [Examples](examples/README.md): repeatable protocol comparison and live OpenAI-compatible execution.
-- [Changelog](CHANGELOG.md): release notes and public-surface changes.
+- credentials, provider SDKs, model routing, retries, and failover
+- pricing tables and cost estimation
+- persistence, queues, permissions, UI, and tool side effects
+- any production policy around web search, code execution, or other tools
 
-## Choose Your Entry Point
+That boundary is the value proposition: Dogpile gives you coordinated model
+work you can observe and replay, without taking over the product surface around
+it.
+
+## Choose Your Path
 
 | Need | Start here |
 | --- | --- |
-| One application workflow | `Dogpile.pile({ intent, model })` |
-| Functional API without the namespace | `run({ intent, model })` |
-| Live UI or logs | `Dogpile.stream({ intent, model })` |
-| Repeated controlled runs | `Dogpile.createEngine({ protocol, tier, model })` |
-| Load a saved trace | `Dogpile.replay(trace)` |
-| Direct compatible HTTP endpoint | `createOpenAICompatibleProvider(options)` |
+| Run one coordinated mission | `Dogpile.pile({ intent, model })` |
+| Keep a UI or log view live | `Dogpile.stream({ intent, model })` |
+| Compare coordination strategies | Pick `sequential`, `broadcast`, `shared`, or `coordinator` |
+| Reuse fixed settings across many runs | `Dogpile.createEngine({ protocol, tier, model })` |
+| Save and reload a completed run | Persist `result.trace`, then call `Dogpile.replay(trace)` |
+| Use direct HTTP with OpenAI-compatible servers | `createOpenAICompatibleProvider(options)` |
 
 ## Install
 
-Dogpile ships to npm as `@dogpile/sdk`, a pure TypeScript package with its own provider-neutral model interface. The package root has no provider SDK peer dependency: pass any object that implements `ConfiguredModelProvider`, or use the built-in dependency-free OpenAI-compatible adapter for direct HTTP calls.
+Dogpile ships to npm as `@dogpile/sdk`, a pure TypeScript package with its own
+provider-neutral model interface. The package root has no provider SDK peer
+dependency: pass any object that implements `ConfiguredModelProvider`, or use
+the built-in dependency-free OpenAI-compatible adapter for direct HTTP calls.
 
 ```sh
 pnpm add @dogpile/sdk
@@ -83,139 +97,17 @@ yarn add @dogpile/sdk
 bun add @dogpile/sdk
 ```
 
-Dogpile itself does not read API keys or any other environment variables. Your provider object owns credentials, routing, pricing, retries, and any vendor SDKs.
+Dogpile itself does not read API keys or any other environment variables. Your
+provider object owns credentials, routing, pricing, retries, and any vendor
+SDKs.
 
-The SDK supports only Node.js LTS 22 / 24, Bun latest, and browser ESM runtimes. Core APIs are stateless and do not require filesystem access, a database, or a session store. Browser-aware bundlers can use the package root's `browser` export condition, and direct browser ESM consumers can import the bundled entrypoint from `@dogpile/sdk/browser`.
+The SDK supports only Node.js LTS 22 / 24, Bun latest, and browser ESM runtimes.
+Core APIs are stateless and do not require filesystem access, a database, or a
+session store. Browser-aware bundlers can use the package root's `browser`
+export condition, and direct browser ESM consumers can import the bundled
+entrypoint from `@dogpile/sdk/browser`.
 
-### Packed Tarball Quickstart Setup
-
-Use the packed-tarball path when validating the exact package that will be
-published. Packing from this repository requires Node.js LTS 22 or 24 and
-pnpm 10.33.0. Running the quickstart from a consumer project requires one of
-the supported runtimes: Node.js LTS 22 / 24 or Bun latest.
-
-From the Dogpile repository, build and pack the SDK:
-
-```sh
-pnpm install
-pnpm run build
-pnpm pack --pack-destination ./packed
-```
-
-The local tarball is named `dogpile-sdk-0.2.1.tgz` for the scoped package
-`@dogpile/sdk@0.2.1`. Install that tarball into a fresh consumer project:
-
-```sh
-mkdir ../dogpile-quickstart
-cd ../dogpile-quickstart
-pnpm init
-pnpm add ../dogpile/packed/dogpile-sdk-0.2.1.tgz
-```
-
-Equivalent install commands for other supported package managers are:
-
-```sh
-npm install ../dogpile/packed/dogpile-sdk-0.2.1.tgz
-yarn add ../dogpile/packed/dogpile-sdk-0.2.1.tgz
-bun add ../dogpile/packed/dogpile-sdk-0.2.1.tgz
-```
-
-## Versioning and Stability
-
-Dogpile follows semantic versioning for published packages:
-
-- Patch releases fix bugs, tighten docs, or add tests without changing public behavior.
-- Minor releases add backward-compatible APIs, protocols, event fields, or runtime support.
-- Major releases may change public contracts, remove deprecated APIs, or alter protocol semantics.
-
-The current public surface includes the package root exports, high-level `Dogpile.pile()`, `run()`, `stream()`, `createEngine()`, the dependency-free OpenAI-compatible provider adapter, protocol and tier discriminated unions, event unions, trace/result types, and runtime portability guarantees for Node.js LTS 22 / 24, Bun latest, and browser ESM runtimes.
-
-Dogpile treats documented `dist` entrypoints, their runtime implementation dependencies, JavaScript source maps, declaration maps, original TypeScript sources for shipped runtime/browser/provider files, `README.md`, `CHANGELOG.md`, and `LICENSE` as the publishable package payload. Demo, benchmark, deterministic testing, and internal helper files are repository-only and stay out of the npm tarball. Core runtime code must remain pure TypeScript, storage-free, and free of Node-only dependencies so the same package can run across the supported Node.js, Bun, and browser ESM runtimes.
-
-## Release Verification
-
-Before publishing, run the local package gates:
-
-```sh
-pnpm run package:identity
-pnpm run package:artifacts
-pnpm run browser:smoke
-pnpm run benchmark:baseline
-pnpm run quickstart:smoke
-pnpm run verify
-pnpm run pack:check
-pnpm run publish:check
-```
-
-What each gate proves:
-
-- `package:identity` asserts the scoped npm package name `@dogpile/sdk`, the current release identity, required package metadata, and release-facing references in source, docs, tests, and CI.
-- `package:artifacts` verifies that package metadata references only emitted runtime JavaScript and TypeScript declaration files covered by `package.json` `files`.
-- `browser:smoke` rebuilds the browser ESM bundle and imports `@dogpile/sdk` through the package root `browser` condition.
-- `benchmark:baseline` rebuilds `dist`, runs the deterministic protocol-loop timing harness, and prints repeatable JSON for local before/after comparisons.
-- `quickstart:smoke` creates a real `pnpm pack` tarball, installs it into a fresh consumer project, and asserts the dependency and lockfile resolve `@dogpile/sdk` from the `.tgz` instead of `workspace:` or `link:` metadata.
-- `quickstart:smoke` also verifies installed entrypoints and `dist` imports do not resolve through local source imports, imports every public package subpath from the installed tarball, runs the marked README quickstart, runs `tsc --noEmit` from the consumer project, verifies private helper files are absent from the installed tarball, and proves private helper subpaths remain blocked by package exports.
-- `consumer:smoke` is kept as the same packed-tarball quickstart smoke command for compatibility.
-- `verify` rebuilds `dist`, runs the package artifact guard, runs the packed-tarball quickstart smoke, runs strict typecheck, and then runs the test suite.
-- `pack:check` runs package identity, rebuilds `dist`, verifies package artifacts, runs the packed-tarball quickstart smoke, checks packed JavaScript source maps and declaration maps, and finishes with `npm pack --dry-run`.
-- `publish:check` runs `verify`, reruns the package artifact guard, and then runs `npm publish --dry-run` so the package metadata, export map, and publishable files are checked without publishing.
-
-The release identity is `@dogpile/sdk@0.2.1`. A real `pnpm pack` or `npm pack` for this scoped package produces the local tarball `dogpile-sdk-0.2.1.tgz`; the dry-run package gate must report that tarball filename and the scoped npm package name before publish. See `CHANGELOG.md` for release notes and breaking-change documentation.
-
-The browser ESM target is emitted at `dist/browser/index.js` with `dist/browser/index.js.map`; both the package root `browser` condition and the explicit `@dogpile/sdk/browser` subpath resolve to that bundled artifact.
-
-### Required CI Status Checks
-
-Before publishing from `main` or a `release/**` branch, GitHub branch protection or release review must require these `Release Validation` workflow checks to pass:
-
-- `Release Validation / Required Node.js 22 full suite`
-- `Release Validation / Required Node.js 24 full suite`
-- `Release Validation / Required Bun latest full suite`
-- `Release Validation / Required browser bundle smoke`
-- `Release Validation / Required packed-tarball quickstart smoke`
-- `Release Validation / Required pack:check package artifact`
-
-Do not publish `@dogpile/sdk` unless all Node LTS matrix entries, the Bun latest suite, the browser bundle smoke job, the packed-tarball quickstart smoke job, and the dependent `pack:check` package artifact job are green.
-
-### Automated npm Publishing
-
-`.github/workflows/npm-publish.yml` publishes `@dogpile/sdk` from GitHub Actions
-when a GitHub Release is published. It can also be started manually with
-`workflow_dispatch`; the manual path defaults to a dry run.
-
-The publish workflow uses npm Trusted Publishing/OIDC rather than a long-lived
-npm automation token. Configure the package's trusted publisher on npmjs.com
-with:
-
-- Organization or user: `bubstack`
-- Repository: `dogpile`
-- Workflow filename: `npm-publish.yml`
-- Environment name: `npm`
-
-Before the first automated release, publish the initial package version from an
-npm account with owner access to the `@dogpile` scope:
-
-```sh
-npm publish --access public
-```
-
-That first manual publish creates the `@dogpile/sdk` package settings page on
-npmjs.com. After it exists, add the Trusted Publisher fields above, then use
-GitHub Releases or the manual workflow dry-run path for future releases. The
-local safety check for the first publish is:
-
-```sh
-pnpm run publish:check
-```
-
-The workflow grants `id-token: write`, runs on a GitHub-hosted Node.js 24
-runner, installs the latest npm CLI, runs `pnpm run publish:check`, verifies the
-target version is not already published, and then runs
-`npm publish --access public`. Keep the `npm` GitHub environment protected for
-release review if this repository should require human approval before a
-published GitHub Release can reach the npm registry.
-
-## Import
+## Quickstart
 
 Use the branded high-level API for application code:
 
@@ -358,498 +250,37 @@ const provider = createOpenAICompatibleProvider({
 });
 ```
 
-### Provider Boundary
+## Documentation
 
-`ConfiguredModelProvider` is the only model contract Dogpile core needs:
+- [Developer usage guide](https://github.com/bubstack/dogpile/blob/main/docs/developer-usage.md):
+  deeper API choices, providers, protocols, streaming, termination, tools,
+  replay, errors, browser usage, and repo commands.
+- [API and trace reference](https://github.com/bubstack/dogpile/blob/main/docs/reference.md):
+  provider contracts,
+  OpenAI-compatible mapping, runtime tool validation, errors, result shapes, and
+  replay traces.
+- [Release and package guide](https://github.com/bubstack/dogpile/blob/main/docs/release.md):
+  versioning, packed tarball
+  checks, release validation, CI status checks, and npm publishing.
+- [Examples](examples/README.md): repeatable protocol comparison and live
+  OpenAI-compatible execution.
+- [Changelog](CHANGELOG.md): release notes and public-surface changes.
 
-```ts
-const provider = {
-  id: "my-provider",
-  async generate(request) {
-    const response = await myModelClient.complete({
-      messages: request.messages,
-      temperature: request.temperature,
-      signal: request.signal
-    });
+## Research Basis
 
-    return {
-      text: response.text,
-      usage: response.usage,
-      costUsd: response.costUsd
-    };
-  }
-};
-```
+Dogpile's protocol vocabulary and paper-faithfulness examples are based on:
 
-The provider owns vendor SDKs, credentials, model names, retries, routing,
-pricing, and telemetry. Dogpile owns protocol orchestration, events, traces,
-termination policy, and replayable result shapes.
+Dochkina, V. (2026). *Drop the Hierarchy and Roles: How Self-Organizing LLM Agents Outperform Designed Structures*. arXiv:2603.28990 [cs.AI]. https://doi.org/10.48550/arXiv.2603.28990
 
-### OpenAI-Compatible Provider Configuration
-
-`createOpenAICompatibleProvider()` returns Dogpile's
-`ConfiguredModelProvider`, which is the value passed to `Dogpile.pile()`,
-`run()`, `stream()`, or `createEngine()`.
-
-```ts
-const provider = createOpenAICompatibleProvider({
-  id: "openai:gpt-4.1-mini",
-  model: "gpt-4.1-mini",
-  apiKey: process.env.OPENAI_API_KEY,
-  maxOutputTokens: 1_024,
-  extraBody: {
-    reasoning_effort: "low"
-  },
-  costEstimator({ usage }) {
-    return usage ? usage.totalTokens * 0.0000003 : undefined;
-  }
-});
-```
-
-The configuration object supports:
-
-- `model`: required model id sent to the compatible chat-completions endpoint.
-- `apiKey`: optional bearer token. Dogpile does not read environment variables;
-  pass the credential explicitly when the endpoint requires one.
-- `baseURL`: endpoint root; defaults to `https://api.openai.com/v1`.
-- `path`: request path under `baseURL`; defaults to `/chat/completions`.
-- `id`: stable provider id stored in events, traces, and errors; when omitted,
-  Dogpile uses `openai-compatible:<model>`.
-- `fetch`: optional fetch-compatible implementation for tests, custom runtimes,
-  proxies, or instrumentation.
-- `costEstimator`: caller-owned usage-to-USD function. Dogpile passes
-  `{ providerId, request, response, usage }` and records the returned number as
-  `costUsd`; Dogpile does not bundle model pricing.
-- `headers`: optional headers merged into the request. `authorization` is set
-  from `apiKey` unless you provide it yourself.
-- `maxOutputTokens`: optional positive integer sent as `max_tokens`.
-- `extraBody`: optional JSON object merged into the request body before
-  Dogpile sets `model`, `messages`, `temperature`, and `max_tokens`.
-
-During each model turn, Dogpile supplies a provider-neutral `ModelRequest` and
-the adapter builds an OpenAI-compatible chat-completions request with this
-mapping:
-
-| Dogpile field | Request field | Behavior |
-| --- | --- | --- |
-| `request.messages[].role` and `request.messages[].content` | `messages[].role` and `messages[].content` | Preserves message order and role/content values. |
-| `request.temperature` | `temperature` | Forwards the protocol-selected sampling temperature. |
-| `request.signal` | `signal` | Passes caller cancellation through to `fetch`. |
-| `request.metadata` | Not forwarded | Remains Dogpile trace/protocol metadata and is available to `costEstimator` through `request`. |
-| `model` | `model` | Sends the configured model id. |
-| `maxOutputTokens` | `max_tokens` | Sends the configured output cap when present. |
-| `extraBody` | request body | Merges caller-owned provider options before canonical Dogpile fields are written. |
-
-OpenAI-compatible responses are normalized back into Dogpile's stable public
-provider types with this mapping:
-
-| Response field | Dogpile field | Behavior |
-| --- | --- | --- |
-| `choices[0].message.content` | `ModelResponse.text` | Becomes the completed model-turn text. String content and text parts are supported. |
-| `choices[0].finish_reason` | `finishReason` | Maps `stop`, `length`, content-filter, and tool-call finish reasons to Dogpile's provider-neutral finish reason union. |
-| `usage.prompt_tokens` / `usage.completion_tokens` / `usage.total_tokens` | `usage` | Maps input/output/total tokens when all counts are available. |
-| Caller `costEstimator` return value | `costUsd` | Calls `costEstimator({ providerId, request, response, usage })`; Dogpile does not ship or infer a pricing table. |
-| `id`, `object`, `created`, `model`, and `usage` | `metadata.openAICompatible` | Stores JSON-compatible response metadata. |
-| HTTP/provider failures | `DogpileError` | Wraps failures with stable string codes such as `provider-rate-limited`, `provider-authentication`, `provider-invalid-request`, and `provider-unavailable`. |
-
-## Runtime Tool Input Validation
-
-Runtime tools can define an optional `validateInput(input)` hook when their
-JSON schema is not enough to enforce the executable contract. Dogpile validates
-the tool definition at registration time, before protocol execution begins; if
-`validateInput` is present, it must be callable. Invalid registrations fail with
-`DogpileError` code `"invalid-configuration"` and a `detail.path` such as
-`tools[0].validateInput`.
-
-For each registered tool call, Dogpile emits the `tool-call` event, builds the
-`RuntimeToolExecutionContext`, then calls `validateInput()` with the normalized
-JSON object input immediately before `execute()`. If the hook is omitted, the
-input is treated as valid. If the hook returns `{ type: "invalid", issues }`,
-Dogpile does not call `execute()`. Instead it returns and emits a
-`RuntimeToolErrorResult` with `error.code: "invalid-input"`, `retryable: false`,
-and `error.detail.issues` copied from the validation result. This is tool-result
-data, not a thrown `DogpileError`, so traces and transcripts remain replayable.
-
-Tool authors should keep `inputSchema` as the model-visible JSON contract and
-use `validateInput()` for runtime-only checks such as cross-field constraints,
-caller policy, adapter limits, or stricter type narrowing before side effects.
-Return serializable `RuntimeToolValidationIssue` objects for ordinary bad model
-or caller input instead of throwing. Keep the hook deterministic and side-effect
-free because it runs on every execution of that tool; put network calls,
-filesystem work, sandbox execution, and other effects inside `execute()` after
-validation has passed.
-
-```ts
-import { type RuntimeTool } from "@dogpile/sdk";
-
-interface LookupInput {
-  readonly query?: string;
+```bibtex
+@misc{dochkina2026drop,
+  title = {Drop the Hierarchy and Roles: How Self-Organizing LLM Agents Outperform Designed Structures},
+  author = {Dochkina, Victoria},
+  year = {2026},
+  eprint = {2603.28990},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.AI},
+  doi = {10.48550/arXiv.2603.28990},
+  url = {https://arxiv.org/abs/2603.28990}
 }
-
-const lookupTool: RuntimeTool<LookupInput> = {
-  identity: {
-    id: "app.tools.lookup",
-    name: "lookup",
-    description: "Look up release context."
-  },
-  inputSchema: {
-    kind: "json-schema",
-    schema: {
-      type: "object",
-      properties: {
-        query: { type: "string", minLength: 1 }
-      },
-      required: ["query"],
-      additionalProperties: false
-    }
-  },
-  validateInput(input) {
-    return typeof input.query === "string" && input.query.trim().length > 0
-      ? { type: "valid" }
-      : {
-          type: "invalid",
-          issues: [
-            {
-              code: "missing-field",
-              path: "query",
-              message: "query is required."
-            }
-          ]
-        };
-  },
-  execute(input, context) {
-    return {
-      type: "success",
-      toolCallId: context.toolCallId,
-      tool: this.identity,
-      output: {
-        answer: `result for ${input.query}`
-      }
-    };
-  }
-};
-```
-
-## DogpileError Codes
-
-`DogpileError` and `DogpileErrorCode` are exported from `@dogpile/sdk`. The
-string `code` values below are the stable public contract for JavaScript callers,
-TypeScript discriminated-union handling, retry policy, and observability. When
-`retryable` is present, prefer it over a hard-coded policy; the handling column
-describes the default caller posture when provider metadata does not override
-it.
-
-| Code | When Dogpile emits it | Caller handling |
-| --- | --- | --- |
-| `invalid-configuration` | Public entrypoint or adapter validation fails before a model turn starts, including malformed `run()`, `stream()`, `createEngine()`, runtime tool, provider registration, or OpenAI-compatible adapter options. `detail.path` points at the failing input. | Treat as a caller/configuration bug. Do not retry the same request; fix the option named by `detail.path`. |
-| `aborted` | A caller `AbortSignal`, `StreamHandle.cancel()`, or provider-facing abort failure cancels an active run or stream. | Treat as intentional cancellation. Stop consuming the run, clean up UI/state, and start a new request only if the user asks. |
-| `timeout` | Dogpile's own `budget.timeoutMs` deadline expires and Dogpile aborts the active provider-facing request. | Safe to retry with a larger timeout, smaller workload, cheaper/faster tier, or different provider. |
-| `provider-authentication` | The configured provider reports authentication or authorization failure, including HTTP 401/403 or API key loading errors. | Do not blindly retry. Refresh credentials, permissions, provider configuration, or account state. |
-| `provider-invalid-request` | The provider SDK rejects the model request shape, prompt, tool choice/input, argument set, or type validation before a valid provider response is produced. | Treat as a request-construction bug. Fix the prompt/tool/options payload before retrying. |
-| `provider-invalid-response` | The provider returns an empty, unparsable, schema-invalid, or no-output response that the configured adapter cannot normalize. | Usually safe to retry once or fail over; log `detail` because repeated failures may indicate provider drift or an unsupported response shape. |
-| `provider-not-found` | The provider SDK reports a missing provider, model, route, or resource, including HTTP 404. | Do not retry unchanged. Verify the configured model id, provider id, deployment, and account access. |
-| `provider-rate-limited` | The provider indicates quota, contention, or rate limiting, including HTTP 409/429. | Retry with backoff or switch providers; surface quota pressure when retries are exhausted. |
-| `provider-timeout` | The provider or upstream gateway times out the request, including HTTP 408/504. | Retry with backoff, reduce prompt/work size, or fail over to another provider. |
-| `provider-unavailable` | The provider is temporarily unavailable, including HTTP 5xx responses or retry exhaustion. | Retry with backoff or fail over. Preserve the original `providerId` and `detail` for incident correlation. |
-| `provider-unsupported` | The provider/model does not support a requested function or model version. | Do not retry unchanged. Disable the unsupported feature or choose a model that supports it. |
-| `provider-error` | The configured adapter reports a generic provider failure that Dogpile cannot map to a narrower provider code. | Check `retryable` and `detail.statusCode` when present. Retry transient status codes; otherwise inspect provider diagnostics. |
-| `unknown` | Dogpile catches an unrecognized provider or adapter failure with no stable mapping. | Treat conservatively: log `detail`, avoid assuming retry safety unless `retryable` is true, and add handling once the underlying failure is understood. |
-
-Use `stream()` or `Dogpile.stream()` when you need a live event log, and `createEngine()` when a research harness needs reusable low-level protocol settings across many missions.
-
-## Benchmark Artifacts
-
-Benchmark runners and deterministic provider fixtures remain repository test
-harnesses in this release. They are intentionally not exported from
-`@dogpile/sdk`.
-Repository tests and benchmark harnesses that need those helpers import them
-from the source-only internal path `../internal.js`, which resolves to
-`src/internal.ts` in the TypeScript source tree.
-Consumer applications should build reproducibility artifacts from the public
-`RunResult`, `Trace`, `transcript`, `eventLog`, and cost summary returned by
-`run()`, `stream()`, or `Dogpile.pile()`.
-
-## Single-Call Workflow Contract
-
-Application code starts with `Dogpile.pile()`: provide the mission and a model
-provider adapter. When `protocol`, `tier`, and `budget` are omitted, Dogpile
-uses the default application flow: Sequential coordination, the `balanced`
-cost/quality tier, and no hard budget caps beyond the tier preset.
-
-```ts
-const result = await Dogpile.pile({
-  intent: "Plan the safest SDK v1 release sequence.",
-  model: provider
-});
-
-console.log(result.output);
-console.log(result.trace.events);
-console.log(result.transcript);
-```
-
-Pass explicit controls when the application needs a non-default protocol,
-cost tier, or hard budget cap:
-
-```ts
-const result = await Dogpile.pile({
-  intent: "Plan the safest SDK v1 release sequence.",
-  protocol: "sequential",
-  tier: "balanced",
-  model: provider,
-  budget: { maxTokens: 20_000 }
-});
-```
-
-Use an explicit protocol configuration when the workflow needs custom
-coordination limits, and pair it with an explicit cost tier plus hard caps:
-
-```ts
-import { Dogpile, type Budget, type ProtocolConfig } from "@dogpile/sdk";
-
-const protocol = {
-  kind: "broadcast",
-  maxRounds: 2
-} satisfies ProtocolConfig;
-
-const budget = {
-  tier: "quality",
-  maxUsd: 0.5,
-  maxTokens: 24_000,
-  qualityWeight: 0.85
-} satisfies Budget;
-
-const result = await Dogpile.pile({
-  intent: "Produce a release-risk brief with independent reviewer opinions.",
-  protocol,
-  tier: budget.tier,
-  model: provider,
-  budget: {
-    maxUsd: budget.maxUsd,
-    maxTokens: budget.maxTokens,
-    qualityWeight: budget.qualityWeight
-  }
-});
-
-console.log(result.output);
-console.log(result.trace.protocol);
-console.log(result.trace.events);
-```
-
-The required inputs are:
-
-- `intent`: the mission the agent collective should solve.
-- `model`: a caller-owned `ConfiguredModelProvider`, backed by your direct provider client, a compatible HTTP endpoint, or a test fixture.
-
-Optional inputs refine the run without changing the core contract:
-
-- `protocol`: `"coordinator"`, `"sequential"`, `"broadcast"`, or `"shared"`, or an explicit protocol config such as `{ kind: "broadcast", maxRounds: 2 }`; omitted protocols default to `"sequential"`. Named broadcast runs default to two rounds: an intention broadcast followed by final decisions. Shared runs may include `organizationalMemory` so every agent sees the same prior-memory snapshot without seeing current-run peer updates.
-- `tier`: `"fast"`, `"balanced"`, or `"quality"`; omitted tiers default to `"balanced"`.
-- `budget`: hard caps layered over the tier, for example `{ maxUsd: 0.25, maxTokens: 20_000, timeoutMs: 60_000, qualityWeight: 0.7 }`. When `timeoutMs` expires, Dogpile aborts the active provider-facing request and rejects with `DogpileError` code `"timeout"`.
-- `agents`: an explicit roster of `{ id, role, instructions? }` participants.
-- `temperature`: an override for the tier-selected default sampling temperature.
-
-Invalid caller configuration is rejected before any protocol turn starts with
-`DogpileError` code `"invalid-configuration"` and `retryable: false`. The
-error `detail` includes `kind: "configuration-validation"`, the failing
-`path`, the `rule`, and the expected shape. Validation covers required
-`intent`, provider registrations, protocol and tier enums, positive turn/round
-limits, non-negative budget caps, normalized `qualityWeight`, agent and tool
-shapes, termination policies, `AbortSignal` inputs, and built-in provider
-adapter options.
-
-Every completed call returns the same result shape:
-
-```ts
-type RunResult = {
-  output: string;
-  eventLog: RunEventLog;
-  trace: Trace;
-  transcript: readonly TranscriptEntry[];
-  usage: RunUsage;
-  metadata: RunMetadata;
-  accounting: RunAccounting;
-  cost: CostSummary;
-  quality?: number;
-};
-```
-
-- `output` is the final synthesized answer.
-- `eventLog` is the complete non-streaming event log with ordered event types, count, and events.
-- `trace` is a JSON-serializable replay artifact containing the run id, protocol, tier, model provider id, agents used, ordered event log, and transcript.
-- `trace.events` is the full event log for coordination moments: `role-assignment`, `agent-turn`, `broadcast`, and `final`. Agent-turn and broadcast records include `decision` when model output follows Dogpile's structured `role_selected`, `participation`, `rationale`, and `contribution` labels.
-- `transcript` is the ordered list of model-visible agent turns with `agentId`, `role`, `input`, `output`, and optional parsed `decision`; it matches `trace.transcript` for ergonomic access.
-- `usage` reports aggregate USD and token accounting.
-- `metadata` exposes run id, protocol, tier, model provider id, participating agents, and start/completion timestamps.
-- `accounting` bundles the selected tier, optional budget caps, termination policy, final usage/cost, budget state snapshots, and cap utilization.
-- `cost` is retained as a compatibility alias for `usage`.
-
-## Replay Trace Contract
-
-`result.trace` is the canonical replay artifact for a completed run. It is
-versioned by `schemaVersion`, JSON-serializable, and contains all SDK-owned
-state required to inspect or reproduce the coordination path without Dogpile
-storage. Callers own persistence and may save the trace as JSON, NDJSON-derived
-records, object storage, or database rows.
-
-The required trace sections are:
-
-- `inputs`: normalized mission, protocol config, tier, model provider id,
-  agent roster, and temperature.
-- `budget`: selected tier, caller caps, and the serializable termination policy
-  used by the run.
-- `seed`: caller seed metadata, or an explicit `source: "none"` record when no
-  seed was supplied.
-- `events`: the ordered event log emitted during execution.
-- `protocolDecisions`: one replay decision per event, with `eventIndex`
-  pointing at the corresponding `events[eventIndex]`.
-- `providerCalls`: every provider request and provider response, ordered by
-  execution and keyed by stable `callId` values such as
-  `${runId}:provider-call:1`.
-- `budgetStateChanges`: cumulative cost snapshots derived from cost-bearing
-  events.
-- `transcript`: ordered model-visible prompt/output turns.
-- `finalOutput`: terminal output, final cost, completion timestamp, and
-  transcript link.
-
-Event ordering is authoritative. `trace.events`, `result.eventLog.events`, and
-the live events yielded by `stream()` use the same order for completed runs.
-`result.eventLog.eventTypes` is exactly `trace.events.map(event => event.type)`,
-and `protocolDecisions[n].eventIndex === n` for each recorded coordination
-moment. The terminal event is always `final` for a successful run, and
-`trace.finalOutput.output` matches `result.output`.
-
-Provider responses are preserved in `trace.providerCalls`, not inferred from
-final text. Each provider call stores the exact provider-neutral `ModelRequest`
-handed to the configured adapter and the exact `ModelResponse` returned by that
-adapter, including optional usage and USD cost. For current protocol runners,
-provider calls are ordered one-to-one with transcript entries and completed
-`agent-turn` events: the `n`th provider response text is the `n`th transcript
-output, and the `n`th transcript input is the final user message in the `n`th
-provider request. Streaming providers may additionally emit
-`model-output-chunk` events before the completed `agent-turn`; the completed
-provider response remains the replay source for the final turn text.
-
-Use `Dogpile.stream()` when the UI or harness needs the event log as it happens.
-The stream yields the same `RunEvent` values that will later appear in
-`result.trace.events`, and the final result is available through
-`handle.result`. Pass `signal` to propagate caller cancellation through
-streamed provider requests, or call `handle.cancel()` to abort the active
-provider-facing request, close the stream iterator, mark `handle.status` as
-`"cancelled"`, and reject `handle.result` with `DogpileError` code
-`"aborted"`.
-
-```ts
-const abortController = new AbortController();
-const handle = Dogpile.stream({
-  intent: "Compare release risks across protocol variants.",
-  protocol: "broadcast",
-  tier: "quality",
-  model: provider,
-  budget: { maxTokens: 12_000 },
-  signal: abortController.signal
-});
-
-for await (const event of handle) {
-  if (event.type === "agent-turn") {
-    renderTurn(event.agentId, event.output);
-  }
-}
-
-// Later, if the user leaves the view or stops the workflow:
-// handle.cancel();
-
-const result = await handle.result;
-```
-
-Use `replay()` / `Dogpile.replay()` or `replayStream()` /
-`Dogpile.replayStream()` when loading a trace artifact you already persisted.
-The replay entrypoints accept the saved `Trace` object and reconstruct the same
-public `RunResult`, event stream, and transcript without calling a model,
-reading disk, or using SDK-managed storage:
-
-```ts
-import { Dogpile, replay, replayStream, type Trace } from "@dogpile/sdk";
-
-const trace = await loadJson<Trace>("run-trace.json");
-
-const result = replay(trace);
-const sameResult = Dogpile.replay(trace);
-const replayHandle = replayStream(trace);
-
-for await (const event of replayHandle) {
-  renderReplayEvent(event);
-}
-
-console.log(result.output);
-console.log(result.eventLog.events);
-console.log(sameResult.transcript);
-console.log((await replayHandle.result).output);
-```
-
-Researchers can drop below the single-call surface with `createEngine()` while
-keeping the same stateless result contract:
-
-```ts
-const engine = Dogpile.createEngine({
-  protocol: { kind: "sequential", maxTurns: 4 },
-  tier: "balanced",
-  model: provider,
-  agents
-});
-
-const reproductionRun = await engine.run("Reproduce the paper triage task.");
-```
-
-For a lower-level reproduction harness, keep protocol settings and agents fixed
-on the engine, capture only the streaming events you need for live analysis, and
-persist the completed trace/transcript yourself:
-
-```ts
-import {
-  Dogpile,
-  type AgentSpec,
-  type ProtocolConfig,
-  type RunEvent,
-  type TranscriptEntry
-} from "@dogpile/sdk";
-
-const protocol = {
-  kind: "shared",
-  maxTurns: 4
-} satisfies ProtocolConfig;
-
-const agents = [
-  { id: "a", role: "solver", instructions: "Solve the task directly." },
-  { id: "b", role: "auditor", instructions: "Challenge weak assumptions." },
-  { id: "c", role: "editor", instructions: "Merge the strongest answer." }
-] satisfies readonly AgentSpec[];
-
-const engine = Dogpile.createEngine({
-  protocol,
-  tier: "quality",
-  model: provider,
-  agents,
-  temperature: 0.1,
-  budget: { maxTokens: 16_000, qualityWeight: 0.9 }
-});
-
-const handle = engine.stream("Re-run the L3 release readiness triage fixture.");
-const eventLog: RunEvent[] = [];
-
-for await (const event of handle) {
-  if (event.type === "agent-turn" || event.type === "broadcast") {
-    eventLog.push(event);
-  }
-}
-
-const result = await handle.result;
-const transcript: readonly TranscriptEntry[] = result.transcript;
-const replayArtifact = {
-  output: result.output,
-  eventLog,
-  transcript,
-  trace: result.trace
-};
-
-await saveJson(replayArtifact);
 ```
