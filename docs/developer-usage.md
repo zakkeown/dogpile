@@ -474,6 +474,57 @@ By default, `withRetry`:
 Pass a custom `retryOn` predicate to retry on adapter-specific error shapes,
 or `delayForError` to honor a non-Dogpile `Retry-After` style hint.
 
+## Structured Logging
+
+`Logger` is a small structured-logging seam: four severity methods that take a
+message and an optional JSON-shaped field bag. `loggerFromEvents` bridges any
+`Logger` to a stream handle so a caller does not have to write the
+event-to-log mapping themselves.
+
+```ts
+import {
+  Dogpile,
+  consoleLogger,
+  loggerFromEvents
+} from "@dogpile/sdk";
+
+const logger = consoleLogger({ level: "info" });
+
+const handle = Dogpile.stream({ intent: "Plan the migration.", model });
+handle.subscribe(loggerFromEvents(logger));
+
+const result = await handle.result;
+```
+
+Wire pino, winston, or any other logger by implementing four methods:
+
+```ts
+import pino from "pino";
+import { Dogpile, loggerFromEvents, type Logger } from "@dogpile/sdk";
+
+const pinoBase = pino({ level: "info" });
+const logger: Logger = {
+  debug: (message, fields) => pinoBase.debug({ ...fields }, message),
+  info: (message, fields) => pinoBase.info({ ...fields }, message),
+  warn: (message, fields) => pinoBase.warn({ ...fields }, message),
+  error: (message, fields) => pinoBase.error({ ...fields }, message)
+};
+
+const handle = Dogpile.stream({ intent, model });
+handle.subscribe(loggerFromEvents(logger, { include: ["agent-turn", "budget-stop", "error"] }));
+```
+
+Defaults applied by `loggerFromEvents`:
+
+- `model-output-chunk` events log at `debug`.
+- `budget-stop` and `tool-result` errors log at `warn`.
+- Stream `error` events log at `error`.
+- Everything else logs at `info`.
+
+Override per event via `levelFor`. A logger that throws is caught and routed
+to the same logger's `error` channel — a misbehaving logger cannot crash an
+in-flight run.
+
 ## Browser Usage
 
 Browser-aware bundlers can import from the package root and use the `browser`

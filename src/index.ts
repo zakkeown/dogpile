@@ -8,6 +8,8 @@
  */
 export { Dogpile, createEngine, replay, replayStream, run, stream } from "./runtime/engine.js";
 export { createOpenAICompatibleProvider } from "./providers/openai-compatible.js";
+export { consoleLogger, loggerFromEvents, noopLogger } from "./runtime/logger.js";
+export type { Logger, LoggerFromEventsOptions, LogLevel } from "./runtime/logger.js";
 export { DEFAULT_RETRYABLE_DOGPILE_CODES, withRetry } from "./runtime/retry.js";
 export type { RetryAttemptInfo, RetryJitterMode, RetryPolicy } from "./runtime/retry.js";
 export { DogpileError } from "./types.js";

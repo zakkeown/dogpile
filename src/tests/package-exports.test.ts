@@ -1126,6 +1126,7 @@ describe("package exports", () => {
       "src/runtime/defaults.ts",
       "src/runtime/engine.ts",
       "src/runtime/ids.ts",
+      "src/runtime/logger.ts",
       "src/runtime/model.ts",
       "src/runtime/retry.ts",
       "src/runtime/sequential.ts",
@@ -1271,6 +1272,11 @@ describe("package exports", () => {
         types: "./dist/providers/openai-compatible.d.ts",
         import: "./dist/providers/openai-compatible.js",
         default: "./dist/providers/openai-compatible.js"
+      },
+      "./runtime/logger": {
+        types: "./dist/runtime/logger.d.ts",
+        import: "./dist/runtime/logger.js",
+        default: "./dist/runtime/logger.js"
       },
       "./runtime/retry": {
         types: "./dist/runtime/retry.d.ts",
