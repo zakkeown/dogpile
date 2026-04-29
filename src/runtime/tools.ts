@@ -19,6 +19,7 @@ import type {
   ModelMessage,
   ModelResponse
 } from "../types.js";
+import { DogpileError } from "../types.js";
 import { validateRuntimeToolRegistrations } from "./validation.js";
 
 type VercelAIToolExecuteOptions = {
@@ -846,7 +847,7 @@ export function createCodeExecToolAdapter(
             message: "Invalid codeExec tool input.",
             retryable: false,
             detail: {
-              issues: validation.issues as unknown as JsonValue
+              issues: serializeValidationIssues(validation.issues)
             }
           }
         };
@@ -948,7 +949,11 @@ export async function normalizeVercelAITool<
   Output extends JsonValue
 >(definition: VercelAIToolDefinition<Name, Input, Output>): Promise<RuntimeTool<Input, Output>> {
   if (!definition.tool.execute) {
-    throw new Error(`Vercel AI tool "${definition.name}" must define execute() to run inside Dogpile.`);
+    throw new DogpileError({
+      code: "invalid-configuration",
+      message: `Vercel AI tool "${definition.name}" must define execute() to run inside Dogpile.`,
+      detail: { toolName: definition.name }
+    });
   }
 
   const identity = vercelAIToolIdentity(definition);
@@ -1041,7 +1046,7 @@ async function executeBuiltInTool<Input extends object, Output>(
         message: `Invalid ${name} tool input.`,
         retryable: false,
         detail: {
-          issues: validation.issues as unknown as JsonValue
+          issues: serializeValidationIssues(validation.issues)
         }
       }
     };
@@ -1138,7 +1143,10 @@ async function resolveVercelAIToolOutput<Output extends JsonValue>(
     }
 
     if (lastOutput === undefined) {
-      throw new Error("Vercel AI tool async iterable completed without an output.");
+      throw new DogpileError({
+        code: "provider-invalid-response",
+        message: "Vercel AI tool async iterable completed without an output."
+      });
     }
 
     return lastOutput;
@@ -1153,9 +1161,24 @@ function isAsyncIterable<Output extends JsonValue>(
   return typeof value === "object" && value !== null && Symbol.asyncIterator in value;
 }
 
+function serializeValidationIssues(
+  issues: readonly RuntimeToolValidationIssue[]
+): JsonValue {
+  return issues.map((issue): JsonObject => ({
+    code: issue.code,
+    path: issue.path,
+    message: issue.message,
+    ...(issue.detail !== undefined ? { detail: issue.detail } : {})
+  }));
+}
+
 function asJsonObject(value: unknown, label: string): JsonObject {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${label} must resolve to a JSON object.`);
+    throw new DogpileError({
+      code: "provider-invalid-response",
+      message: `${label} must resolve to a JSON object.`,
+      detail: { label }
+    });
   }
 
   return value as JsonObject;
@@ -1514,5 +1537,9 @@ function removeUndefinedIdentityFields(
 }
 
 function asJsonRuntimeVercelAITool(tool: VercelAIToolSetEntry): VercelAITool<JsonObject, JsonValue> {
+  // Structural narrowing: the runtime treats every Vercel-AI tool as having a
+  // JSON-shaped (input, output) pair — the upstream `ai` generics are nominal
+  // and don't survive without an unsafe widening. Pinned here as the single
+  // bridge point so future provider migrations only touch one cast.
   return tool as unknown as VercelAITool<JsonObject, JsonValue>;
 }

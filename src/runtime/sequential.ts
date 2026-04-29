@@ -18,6 +18,7 @@ import type {
   Tier,
   TranscriptEntry
 } from "../types.js";
+import { createRunId, elapsedMs, nowMs } from "./ids.js";
 import {
   addCost,
   createReplayTraceBudget,
@@ -369,15 +370,3 @@ function responseCost(response: ModelResponse): CostSummary {
   };
 }
 
-function createRunId(): string {
-  const random = globalThis.crypto?.randomUUID?.();
-  return random ?? `run-${Date.now().toString(36)}`;
-}
-
-function nowMs(): number {
-  return globalThis.performance?.now() ?? Date.now();
-}
-
-function elapsedMs(startedAtMs: number): number {
-  return Math.max(0, nowMs() - startedAtMs);
-}

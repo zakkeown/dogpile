@@ -347,7 +347,7 @@ describe("runtime tool adapter focused coverage", () => {
         message: "Vercel AI tool async iterable completed without an output.",
         retryable: false,
         detail: {
-          name: "Error"
+          name: "DogpileError"
         }
       }
     });
