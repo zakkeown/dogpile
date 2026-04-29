@@ -792,191 +792,30 @@ export interface ModelResponse {
   readonly metadata?: JsonObject;
 }
 
-/**
- * Version tag for the replay trace artifact schema.
- */
-export type ReplayTraceSchemaVersion = "1.0";
+// Replay trace types: see src/types/replay.ts
+import type {
+  ReplayTraceBudget,
+  ReplayTraceBudgetStateChange,
+  ReplayTraceFinalOutput,
+  ReplayTraceProtocolDecision,
+  ReplayTraceProtocolDecisionType,
+  ReplayTraceProviderCall,
+  ReplayTraceRunInputs,
+  ReplayTraceSchemaVersion,
+  ReplayTraceSeed
+} from "./types/replay.js";
+export type {
+  ReplayTraceBudget,
+  ReplayTraceBudgetStateChange,
+  ReplayTraceFinalOutput,
+  ReplayTraceProtocolDecision,
+  ReplayTraceProtocolDecisionType,
+  ReplayTraceProviderCall,
+  ReplayTraceRunInputs,
+  ReplayTraceSchemaVersion,
+  ReplayTraceSeed
+};
 
-/**
- * Serializable seed metadata recorded with replay traces.
- *
- * @remarks
- * Most providers do not expose deterministic seed control. Dogpile still
- * records an explicit empty seed artifact so replay consumers can distinguish
- * "no seed supplied" from a missing trace field.
- */
-export interface ReplayTraceSeed {
-  /** Seed artifact discriminant. */
-  readonly kind: "replay-trace-seed";
-  /** Seed source visible to replay tooling. */
-  readonly source: "caller" | "none";
-  /** Caller-supplied seed value, or `null` when no seed was supplied. */
-  readonly value: string | number | null;
-}
-
-/**
- * Normalized run inputs persisted inside the replay trace artifact.
- */
-export interface ReplayTraceRunInputs {
-  /** Run input artifact discriminant. */
-  readonly kind: "replay-trace-run-inputs";
-  /** Mission or intent supplied by the caller. */
-  readonly intent: string;
-  /** Exact normalized protocol config used for execution. */
-  readonly protocol: ProtocolConfig;
-  /** Selected cost/quality tier. */
-  readonly tier: Tier;
-  /** Configured model provider id. */
-  readonly modelProviderId: string;
-  /** Concrete agent roster visible to the protocol. */
-  readonly agents: readonly AgentSpec[];
-  /** Temperature supplied to provider requests. */
-  readonly temperature: number;
-}
-
-/**
- * Budget and stop-policy artifact persisted inside replay traces.
- */
-export interface ReplayTraceBudget {
-  /** Budget artifact discriminant. */
-  readonly kind: "replay-trace-budget";
-  /** Selected cost/quality tier. */
-  readonly tier: Tier;
-  /** Optional hard caps supplied by the caller. */
-  readonly caps?: Omit<Budget, "tier">;
-  /** Optional composable termination policy used by the protocol. */
-  readonly termination?: TerminationCondition;
-}
-
-/**
- * Budget state snapshot derived from a cost-bearing trace event.
- *
- * @remarks
- * Replay consumers can inspect this artifact without walking the full event
- * log. Entries are emitted for model-turn accounting changes, coordination
- * barriers that expose cumulative cost, budget stops, and final completion.
- */
-export interface ReplayTraceBudgetStateChange {
-  /** Budget state artifact discriminant. */
-  readonly kind: "replay-trace-budget-state-change";
-  /** Zero-based event index that exposed this budget state. */
-  readonly eventIndex: number;
-  /** Source event type for the budget state. */
-  readonly eventType: "agent-turn" | "broadcast" | "budget-stop" | "final";
-  /** ISO-8601 timestamp from the source event. */
-  readonly at: string;
-  /** Cumulative cost visible at this point in the run. */
-  readonly cost: CostSummary;
-  /** Completed model-turn iteration count when known. */
-  readonly iteration?: number;
-  /** Elapsed runtime in milliseconds when known. */
-  readonly elapsedMs?: number;
-  /** Budget stop reason when this state records a halt. */
-  readonly budgetReason?: BudgetStopReason;
-}
-
-/**
- * Provider-neutral protocol decision kinds recorded for replay.
- */
-export type ReplayTraceProtocolDecisionType =
-  | "assign-role"
-  | "select-agent-turn"
-  | "start-model-call"
-  | "complete-model-call"
-  | "observe-model-output"
-  | "start-tool-call"
-  | "complete-tool-call"
-  | "collect-broadcast-round"
-  | "stop-for-budget"
-  | "finalize-output";
-
-/**
- * Protocol-level decision appended during execution.
- */
-export interface ReplayTraceProtocolDecision {
-  /** Decision artifact discriminant. */
-  readonly kind: "replay-trace-protocol-decision";
-  /** Zero-based event index that produced this decision. */
-  readonly eventIndex: number;
-  /** Event type that records the decision. */
-  readonly eventType: RunEvent["type"];
-  /** Coordination protocol that made the decision. */
-  readonly protocol: Protocol;
-  /** Provider-neutral decision kind for replay tooling. */
-  readonly decision: ReplayTraceProtocolDecisionType;
-  /** ISO-8601 timestamp from the source event. */
-  readonly at: string;
-  /** Agent involved in the decision, when agent-scoped. */
-  readonly agentId?: string;
-  /** Role involved in the decision, when agent-scoped. */
-  readonly role?: string;
-  /** Provider call involved in the decision, when model-scoped. */
-  readonly callId?: string;
-  /** Provider involved in the decision, when model-scoped. */
-  readonly providerId?: string;
-  /** Tool call involved in the decision, when tool-scoped. */
-  readonly toolCallId?: string;
-  /** Tool identity involved in the decision, when tool-scoped. */
-  readonly tool?: RuntimeToolIdentity;
-  /** One-based protocol turn for turn-scoped decisions. */
-  readonly turn?: number;
-  /** Coordinator phase for coordinator protocol turn decisions. */
-  readonly phase?: "plan" | "worker" | "final-synthesis";
-  /** One-based broadcast round for grouped broadcast decisions. */
-  readonly round?: number;
-  /** Number of transcript entries visible after this decision. */
-  readonly transcriptEntryCount?: number;
-  /** Number of contributions collected at a broadcast barrier. */
-  readonly contributionCount?: number;
-  /** Prompt/input associated with turn decisions. */
-  readonly input?: string;
-  /** Output associated with turn or final decisions. */
-  readonly output?: string;
-  /** Cumulative cost visible at this decision point. */
-  readonly cost?: CostSummary;
-  /** Normalized budget stop reason for budget-stop decisions. */
-  readonly budgetReason?: BudgetStopReason;
-}
-
-/**
- * Provider call metadata and response captured for replay inspection.
- */
-export interface ReplayTraceProviderCall {
-  /** Provider call artifact discriminant. */
-  readonly kind: "replay-trace-provider-call";
-  /** Stable call id within the run. */
-  readonly callId: string;
-  /** Configured model provider id. */
-  readonly providerId: string;
-  /** ISO-8601 timestamp before the provider call started. */
-  readonly startedAt: string;
-  /** ISO-8601 timestamp after the provider call completed. */
-  readonly completedAt: string;
-  /** Agent that requested this provider call. */
-  readonly agentId: string;
-  /** Role that requested this provider call. */
-  readonly role: string;
-  /** Request handed to the configured model provider. */
-  readonly request: ModelRequest;
-  /** Response returned by the configured model provider. */
-  readonly response: ModelResponse;
-}
-
-/**
- * Final output artifact persisted inside replay traces.
- */
-export interface ReplayTraceFinalOutput {
-  /** Final output artifact discriminant. */
-  readonly kind: "replay-trace-final-output";
-  /** Final synthesized output returned by the run. */
-  readonly output: string;
-  /** Total cost at completion. */
-  readonly cost: CostSummary;
-  /** ISO-8601 completion timestamp from the terminal event. */
-  readonly completedAt: string;
-  /** Link to the completed transcript artifact. */
-  readonly transcript: TranscriptLink;
-}
 
 /**
  * Incremental text produced by a streaming model provider.
@@ -1411,817 +1250,88 @@ export interface RuntimeToolAdapterContract<Input extends object = JsonObject, O
   validateInput(input: Readonly<Input>): RuntimeToolValidationResult;
 }
 
-/**
- * Required output artifact for a benchmark task.
- */
-export interface BenchmarkRequiredArtifact {
-  /** Stable artifact name used by scorers and reports. */
-  readonly name: string;
-  /** Fixture-defined artifact shape, for example `enum` or `markdown_table`. */
-  readonly type: string;
-  /** Optional human-readable artifact requirement. */
-  readonly description?: string;
-  /** Optional allowed values for constrained artifacts. */
-  readonly allowedValues?: readonly string[];
-}
+// Benchmark types: see src/types/benchmark.ts
+import type {
+  BenchmarkBudget,
+  BenchmarkCostAccounting,
+  BenchmarkModelSettings,
+  BenchmarkProtocolArtifact,
+  BenchmarkProtocolScore,
+  BenchmarkReproducibilityArtifact,
+  BenchmarkRequiredArtifact,
+  BenchmarkRunArtifact,
+  BenchmarkRunnerConfig,
+  BenchmarkScoreDimension,
+  BenchmarkStreamingEventLog,
+  BenchmarkTaskInput,
+  ProtocolBenchmarkRunConfig
+} from "./types/benchmark.js";
+export type {
+  BenchmarkBudget,
+  BenchmarkCostAccounting,
+  BenchmarkModelSettings,
+  BenchmarkProtocolArtifact,
+  BenchmarkProtocolScore,
+  BenchmarkReproducibilityArtifact,
+  BenchmarkRequiredArtifact,
+  BenchmarkRunArtifact,
+  BenchmarkRunnerConfig,
+  BenchmarkScoreDimension,
+  BenchmarkStreamingEventLog,
+  BenchmarkTaskInput,
+  ProtocolBenchmarkRunConfig
+};
 
-/**
- * Serializable task input shared by benchmark protocol runners.
- */
-export interface BenchmarkTaskInput {
-  /** Stable benchmark task id. */
-  readonly id: string;
-  /** Mission text supplied to protocol runners. */
-  readonly intent: string;
-  /** Optional task title for reports. */
-  readonly title?: string;
-  /** Optional benchmark difficulty or paper task level, such as `L3`. */
-  readonly level?: string;
-  /** Required artifacts the run output must contain. */
-  readonly requiredArtifacts?: readonly BenchmarkRequiredArtifact[];
-  /** Serializable scoring rubric or fixture-specific judging metadata. */
-  readonly rubric?: JsonObject;
-  /** Additional serializable fixture metadata. */
-  readonly metadata?: JsonObject;
-}
+// Events: see src/types/events.ts
+import type {
+  AgentDecision,
+  AgentParticipation,
+  BroadcastContribution,
+  BroadcastEvent,
+  BudgetStopEvent,
+  FinalEvent,
+  ModelActivityEvent,
+  ModelOutputChunkEvent,
+  ModelRequestEvent,
+  ModelResponseEvent,
+  RoleAssignmentEvent,
+  RunEvent,
+  StreamCompletionEvent,
+  StreamErrorEvent,
+  StreamEvent,
+  StreamLifecycleEvent,
+  StreamOutputEvent,
+  ToolActivityEvent,
+  ToolCallEvent,
+  ToolResultEvent,
+  TranscriptLink,
+  TurnEvent
+} from "./types/events.js";
+export type {
+  AgentDecision,
+  AgentParticipation,
+  BroadcastContribution,
+  BroadcastEvent,
+  BudgetStopEvent,
+  FinalEvent,
+  ModelActivityEvent,
+  ModelOutputChunkEvent,
+  ModelRequestEvent,
+  ModelResponseEvent,
+  RoleAssignmentEvent,
+  RunEvent,
+  StreamCompletionEvent,
+  StreamErrorEvent,
+  StreamEvent,
+  StreamLifecycleEvent,
+  StreamOutputEvent,
+  ToolActivityEvent,
+  ToolCallEvent,
+  ToolResultEvent,
+  TranscriptLink,
+  TurnEvent
+};
 
-/**
- * Benchmark budget controls shared by all protocol runners in one comparison.
- */
-export interface BenchmarkBudget {
-  /** Named cost/quality tier selected for the benchmark run. */
-  readonly tier: Tier;
-  /** Optional maximum spend in US dollars. */
-  readonly maxUsd?: number;
-  /** Optional maximum input token count. */
-  readonly maxInputTokens?: number;
-  /** Optional maximum output token count. */
-  readonly maxOutputTokens?: number;
-  /** Optional maximum total token count. */
-  readonly maxTotalTokens?: number;
-  /** Optional quality preference in the inclusive range `0..1`. */
-  readonly qualityWeight?: number;
-}
-
-/**
- * Benchmark model settings shared across protocol runners.
- *
- * @remarks
- * Research and reproduction workflows use this object to hold provider
- * settings constant while changing only the coordination protocol. The
- * `metadata` field is for serializable experiment labels such as corpus id,
- * prompt template version, model family, or paper reproduction condition.
- */
-export interface BenchmarkModelSettings {
-  /** Caller-configured model provider, typically backed by the Vercel AI SDK. */
-  readonly provider: ConfiguredModelProvider;
-  /** Optional fixed temperature for controlled reproduction runs. */
-  readonly temperature?: number;
-  /** Optional deterministic seed recorded for provider adapters that support it. */
-  readonly seed?: number;
-  /** Additional serializable provider or run metadata. */
-  readonly metadata?: JsonObject;
-}
-
-/**
- * Shared benchmark runner configuration before selecting a protocol.
- *
- * @remarks
- * This contract carries the task input, budget policy, and model settings that
- * must stay constant when comparing multiple coordination protocols. It is the
- * researcher-facing escape hatch for paper-faithfulness checks: callers can
- * project one task into Sequential, Broadcast, Shared, and Coordinator runs
- * while preserving the same agents, tier, caps, model, and fixture metadata.
- *
- * The object is intentionally JSON-adjacent and storage-free. Persist benchmark
- * inputs, run manifests, and traces in caller-owned systems.
- */
-export interface BenchmarkRunnerConfig {
-  /** Serializable benchmark task input. */
-  readonly task: BenchmarkTaskInput;
-  /** Shared budget and cap policy. */
-  readonly budget: BenchmarkBudget;
-  /** Shared model provider and generation settings. */
-  readonly model: BenchmarkModelSettings;
-  /** Optional explicit agents; defaults are used when omitted. */
-  readonly agents?: readonly AgentSpec[];
-  /** Additional serializable benchmark metadata. */
-  readonly metadata?: JsonObject;
-}
-
-/**
- * Benchmark configuration for one concrete protocol runner invocation.
- *
- * @remarks
- * Use this derived shape after selecting the protocol under test. It preserves
- * the shared benchmark controls from {@link BenchmarkRunnerConfig} and adds a
- * named or explicit {@link ProtocolConfig}, which lets reproduction code tune
- * protocol-native parameters without widening the high-level API.
- */
-export interface ProtocolBenchmarkRunConfig extends BenchmarkRunnerConfig {
-  /** Protocol being evaluated under the shared benchmark settings. */
-  readonly protocol: Protocol | ProtocolConfig;
-}
-
-/**
- * Serializable benchmark protocol descriptor persisted with run artifacts.
- *
- * @remarks
- * Benchmark artifacts record both the normalized protocol name and the exact
- * caller-supplied protocol config so a reproduction harness can distinguish
- * `"sequential"` defaults from `{ kind: "sequential", maxTurns: 4 }`.
- */
-export interface BenchmarkProtocolArtifact {
-  /** Normalized protocol name used for comparison grouping. */
-  readonly kind: Protocol;
-  /** Exact protocol value supplied to the runner. */
-  readonly config: Protocol | ProtocolConfig;
-}
-
-/**
- * Reproducibility metadata persisted with every benchmark run artifact.
- *
- * @remarks
- * This shape intentionally stores provider identity and serializable model
- * settings, but not the provider implementation itself. Callers own provider
- * construction and external storage; Dogpile owns the portable artifact shape.
- */
-export interface BenchmarkReproducibilityArtifact {
-  /** Benchmark task input used for this run. */
-  readonly task: BenchmarkTaskInput;
-  /** Shared budget and cap policy used for this run. */
-  readonly budget: BenchmarkBudget;
-  /** Protocol selected for this run. */
-  readonly protocol: BenchmarkProtocolArtifact;
-  /** Provider id recorded from the configured model. */
-  readonly modelProviderId: string;
-  /** Optional fixed temperature used for the run. */
-  readonly temperature?: number;
-  /** Optional deterministic seed recorded for provider adapters that support it. */
-  readonly seed?: number;
-  /** Additional serializable provider or run metadata. */
-  readonly modelMetadata?: JsonObject;
-  /** Concrete agent roster used for the run. */
-  readonly agents: readonly AgentSpec[];
-  /** Additional serializable benchmark metadata. */
-  readonly benchmarkMetadata?: JsonObject;
-}
-
-/**
- * Cost and budget metadata recorded for one benchmark run.
- *
- * @remarks
- * This accounting block is intentionally duplicated from the run result and
- * benchmark controls so benchmark reports can group, filter, and audit spend
- * without unpacking the full trace or reproduction object. Utilization fields
- * are only present when the corresponding cap was configured.
- */
-export interface BenchmarkCostAccounting {
-  /** Accounting artifact discriminant for future benchmark metadata unions. */
-  readonly kind: "benchmark-cost-accounting";
-  /** Named budget/cost tier selected for this benchmark run. */
-  readonly tier: Tier;
-  /** Shared benchmark budget and cap policy used for this run. */
-  readonly budget: BenchmarkBudget;
-  /** Total token and spend accounting observed for this run. */
-  readonly cost: CostSummary;
-  /** Fraction of the configured USD cap consumed, when `maxUsd` is present. */
-  readonly usdCapUtilization?: number;
-  /** Fraction of the configured total-token cap consumed, when `maxTotalTokens` is present. */
-  readonly totalTokenCapUtilization?: number;
-}
-
-/**
- * Structured streaming event log captured for one benchmark run.
- *
- * @remarks
- * Benchmark artifacts keep this log beside the full trace so reproduction
- * harnesses can inspect exactly what the streaming API yielded during the run
- * without unpacking unrelated trace metadata. The `events` array must match
- * `trace.events` for completed runs.
- */
-export interface BenchmarkStreamingEventLog {
-  /** Event-log discriminant for future benchmark observability artifacts. */
-  readonly kind: "benchmark-streaming-event-log";
-  /** Stable run id shared by the benchmark artifact and trace. */
-  readonly runId: string;
-  /** Protocol whose streaming events were captured. */
-  readonly protocol: Protocol;
-  /** Ordered event kinds for compact coverage checks. */
-  readonly eventTypes: readonly RunEvent["type"][];
-  /** Number of streaming events captured. */
-  readonly eventCount: number;
-  /** Complete ordered streaming events yielded by the run. */
-  readonly events: readonly RunEvent[];
-}
-
-/**
- * Serializable score persisted for one protocol benchmark artifact.
- *
- * @remarks
- * The score is protocol-scoped because paper reproduction reports compare the
- * same task across protocol variants. When a judge supplies
- * {@link RunResult.quality}, the benchmark score records that value on a
- * 0..100 scale. Otherwise Dogpile computes a conservative artifact-completeness
- * score from the captured output, transcript, streaming event log, and budget
- * accounting so unjudged benchmark artifacts still carry an auditable score
- * derived from stored data.
- */
-export interface BenchmarkProtocolScore {
-  /** Score artifact discriminant for future benchmark scoring variants. */
-  readonly kind: "benchmark-protocol-score";
-  /** Protocol this score belongs to. */
-  readonly protocol: Protocol;
-  /** Score in the inclusive range `0..100`. */
-  readonly score: number;
-  /** Normalized score in the inclusive range `0..1`. */
-  readonly normalizedScore: number;
-  /** Maximum score for the current scoring scale. */
-  readonly maxScore: 100;
-  /** How the score was derived. */
-  readonly source: "run-quality" | "artifact-completeness";
-  /** Compact scoring dimensions used to compute the stored score. */
-  readonly dimensions: readonly BenchmarkScoreDimension[];
-}
-
-/**
- * One serializable dimension contributing to a benchmark protocol score.
- */
-export interface BenchmarkScoreDimension {
-  /** Stable dimension name for reports. */
-  readonly name: string;
-  /** Earned points for this dimension. */
-  readonly score: number;
-  /** Maximum points available for this dimension. */
-  readonly maxScore: number;
-}
-
-/**
- * Reproducible benchmark output artifact for one protocol run.
- *
- * @remarks
- * This is the storage-free persistence contract for reproduction workflows:
- * callers can write the object to JSON, NDJSON, object storage, or a database
- * without Dogpile depending on Node-only filesystem APIs. It contains the final
- * output, full transcript, a structured streaming event log, full trace, cost
- * summary, and all serializable controls needed to replay the run in
- * caller-managed infrastructure.
- */
-export interface BenchmarkRunArtifact {
-  /** Artifact discriminant for future benchmark artifact unions. */
-  readonly kind: "benchmark-run";
-  /** Schema version for reproducible artifact consumers. */
-  readonly schemaVersion: "1.0";
-  /** Stable run id from the trace. */
-  readonly runId: string;
-  /** ISO-8601 timestamp derived from the first trace event when available. */
-  readonly startedAt: string;
-  /** ISO-8601 timestamp derived from the final trace event when available. */
-  readonly completedAt: string;
-  /** Reproduction controls and serializable fixture inputs. */
-  readonly reproducibility: BenchmarkReproducibilityArtifact;
-  /** Final output produced by the protocol. */
-  readonly output: string;
-  /** Complete normalized transcript for this run. */
-  readonly transcript: readonly TranscriptEntry[];
-  /** Structured streaming event log captured for this benchmark run. */
-  readonly eventLog: BenchmarkStreamingEventLog;
-  /** Full serializable event log and trace for this run. */
-  readonly trace: Trace;
-  /** Cost, tier, and benchmark budget metadata for this run. */
-  readonly accounting: BenchmarkCostAccounting;
-  /** Per-protocol benchmark score computed from the captured artifact data. */
-  readonly score: BenchmarkProtocolScore;
-  /** Total token and spend accounting for this run. */
-  readonly cost: CostSummary;
-  /** Optional normalized quality score in the inclusive range `0..1`. */
-  readonly quality?: number;
-}
-
-/**
- * Event emitted when a protocol assigns or records an agent role.
- *
- * @remarks
- * This event normally appears near the beginning of a run and establishes the
- * `agentId`/`role` pair that later turn and transcript records refer to. A
- * renderer can use it to build the participant roster before model output
- * starts streaming.
- *
- * Payload shape:
- *
- * - `type`: always `role-assignment`.
- * - `runId`: stable id shared by every event and trace object for the run.
- * - `at`: ISO-8601 timestamp for when the assignment was emitted.
- * - `agentId`: stable agent id used in events, trace, and transcript entries.
- * - `role`: model-visible role or perspective assigned to that agent.
- */
-export interface RoleAssignmentEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "role-assignment";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Agent receiving the role assignment. */
-  readonly agentId: string;
-  /** Role assigned to the agent. */
-  readonly role: string;
-}
-
-/**
- * Event emitted when Dogpile is about to ask the configured model provider for
- * one protocol-managed response.
- *
- * @remarks
- * This event is the request-side model activity counterpart to
- * {@link ModelResponseEvent}. Protocol implementations may omit it when they
- * only expose completed turns, but adapters and researcher harnesses can emit
- * it to make provider calls visible in the same streaming event log as agent
- * turns and final output.
- */
-export interface ModelRequestEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "model-request";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Stable provider call id within the run. */
-  readonly callId: string;
-  /** Configured model provider id receiving the request. */
-  readonly providerId: string;
-  /** Agent requesting the model call. */
-  readonly agentId: string;
-  /** Agent role for the active model call. */
-  readonly role: string;
-  /** Provider-neutral request handed to the model adapter. */
-  readonly request: ModelRequest;
-}
-
-/**
- * Event emitted after the configured model provider returns one response.
- *
- * @remarks
- * This event records provider-level model activity without forcing callers to
- * infer it from the higher-level {@link TurnEvent}. The response is the same
- * provider-neutral shape captured in replay traces, so it remains portable and
- * JSON-serializable across Node LTS, Bun, and browser ESM runtimes.
- */
-export interface ModelResponseEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "model-response";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Stable provider call id within the run. */
-  readonly callId: string;
-  /** Configured model provider id that produced the response. */
-  readonly providerId: string;
-  /** Agent that requested the model call. */
-  readonly agentId: string;
-  /** Agent role for the completed model call. */
-  readonly role: string;
-  /** Provider-neutral response returned by the model adapter. */
-  readonly response: ModelResponse;
-}
-
-/**
- * Event emitted while a model turn is still generating text.
- *
- * @remarks
- * `model-output-chunk` lets streaming callers render provider output before
- * the protocol has enough information to commit the completed `agent-turn`
- * transcript entry. It is emitted only when the configured model provider
- * implements {@link ConfiguredModelProvider.stream}; non-streaming providers
- * continue to produce the existing role/turn/final event sequence.
- *
- * Payload shape:
- *
- * - `type`: always `model-output-chunk`.
- * - `runId`: stable id shared by every event and trace object for the run.
- * - `at`: ISO-8601 timestamp for when the chunk was observed.
- * - `agentId` and `role`: identify the active generating agent.
- * - `input`: prompt text visible to that agent for this turn.
- * - `chunkIndex`: zero-based chunk index within this model turn.
- * - `text`: text delta from the provider.
- * - `output`: accumulated output for this turn after applying the chunk.
- */
-export interface ModelOutputChunkEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "model-output-chunk";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Agent currently producing output. */
-  readonly agentId: string;
-  /** Agent role for the active turn. */
-  readonly role: string;
-  /** Prompt/input visible to the agent for this turn. */
-  readonly input: string;
-  /** Zero-based chunk index within the active model turn. */
-  readonly chunkIndex: number;
-  /** Text delta produced by the model provider. */
-  readonly text: string;
-  /** Accumulated output for this turn after applying this chunk. */
-  readonly output: string;
-}
-
-/**
- * Event emitted when a runtime tool is invoked by protocol or model policy.
- *
- * @remarks
- * Tools are caller-owned escape hatches. This request-side event keeps tool
- * invocation observable without making Dogpile core depend on Node-only
- * capabilities, a storage layer, or a provider-specific function-call shape.
- */
-export interface ToolCallEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "tool-call";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Stable tool call id within the run. */
-  readonly toolCallId: string;
-  /** Tool identity selected for execution. */
-  readonly tool: RuntimeToolIdentity;
-  /** JSON-serializable tool input. */
-  readonly input: JsonObject;
-  /** Agent that requested the tool, when agent-scoped. */
-  readonly agentId?: string;
-  /** Agent role that requested the tool, when available. */
-  readonly role?: string;
-}
-
-/**
- * Event emitted after a runtime tool returns a normalized result.
- *
- * @remarks
- * Tool failures are data at the public boundary. The result payload uses the
- * same discriminated union as runtime tool adapters, allowing log consumers to
- * render successful outputs and normalized errors exhaustively.
- */
-export interface ToolResultEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "tool-result";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Stable tool call id within the run. */
-  readonly toolCallId: string;
-  /** Tool identity that produced the result. */
-  readonly tool: RuntimeToolIdentity;
-  /** Normalized JSON-serializable tool result. */
-  readonly result: RuntimeToolResult;
-  /** Agent that requested the tool, when agent-scoped. */
-  readonly agentId?: string;
-  /** Agent role that requested the tool, when available. */
-  readonly role?: string;
-}
-
-/**
- * Provider-normalized participation decision parsed from paper-style agent output.
- *
- * @remarks
- * Dogpile preserves the raw model text on transcript entries and events. When
- * a model emits the labeled fields `role_selected`, `participation`,
- * `rationale`, and `contribution`, protocols also attach this structured
- * metadata so reproduction harnesses can distinguish contribution from
- * voluntary abstention without reparsing raw text.
- */
-export interface AgentDecision {
-  /** Task-specific role selected by the agent for this turn. */
-  readonly selectedRole: string;
-  /** Whether the agent contributed or voluntarily abstained. */
-  readonly participation: AgentParticipation;
-  /** Agent-provided rationale for the selected role and participation choice. */
-  readonly rationale: string;
-  /** Agent-provided contribution text, or abstention explanation. */
-  readonly contribution: string;
-}
-
-/**
- * Agent participation state for a paper-style turn decision.
- */
-export type AgentParticipation = "contribute" | "abstain";
-
-/**
- * Event emitted after one agent contributes a model turn.
- *
- * @remarks
- * `agent-turn` is the primary streaming payload for sequential, coordinator,
- * shared-state, and broadcast executions. It captures the exact prompt/input
- * Dogpile supplied to the agent, the text returned by the model provider, and
- * the cumulative cost after applying that response.
- *
- * The corresponding durable transcript record contains the same
- * `agentId`/`role`/`input`/`output` contribution without event timing or cost
- * fields. Use this event for live progress UIs and the transcript for replay
- * or downstream application logic.
- *
- * Payload shape:
- *
- * - `type`: always `agent-turn`.
- * - `runId`: stable id shared by every event and trace object for the run.
- * - `at`: ISO-8601 timestamp for when the turn completed.
- * - `agentId` and `role`: identify the contributing agent.
- * - `input`: prompt text visible to that agent for this turn.
- * - `output`: generated model text produced by the agent.
- * - `cost`: cumulative token and spend accounting after this turn.
- */
-export interface TurnEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "agent-turn";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Agent that produced this turn. */
-  readonly agentId: string;
-  /** Agent role for this turn. */
-  readonly role: string;
-  /** Prompt/input visible to the agent for this turn. */
-  readonly input: string;
-  /** Model output produced by the agent. */
-  readonly output: string;
-  /** Optional structured role/participation decision parsed from model output. */
-  readonly decision?: AgentDecision;
-  /** Cumulative cost after this turn. */
-  readonly cost: CostSummary;
-}
-
-/**
- * One independent contribution captured by a broadcast round event.
- *
- * @remarks
- * Broadcast protocols collect one contribution per participating agent before
- * synthesis. The contribution payload is intentionally smaller than
- * {@link TurnEvent}: it is a round-level summary of model outputs, while the
- * complete prompt/output pair for each agent is still available as individual
- * `agent-turn` events and {@link TranscriptEntry} records.
- *
- * Payload shape:
- *
- * - `agentId`: stable id of the contributing agent.
- * - `role`: model-visible role or perspective used for that contribution.
- * - `output`: generated text contributed independently for the round.
- */
-export interface BroadcastContribution {
-  /** Agent that produced the broadcast contribution. */
-  readonly agentId: string;
-  /** Agent role for the contribution. */
-  readonly role: string;
-  /** Independent model output produced for the shared mission. */
-  readonly output: string;
-  /** Optional structured role/participation decision parsed from model output. */
-  readonly decision?: AgentDecision;
-}
-
-/**
- * Event emitted after agents broadcast independent contributions for a round.
- *
- * @remarks
- * A `broadcast` event marks the coordination moment where independently
- * generated agent outputs are gathered for a shared round. It does not replace
- * per-agent `agent-turn` events; instead, it groups their outputs by round so
- * observers can render the broadcast barrier and replay the paper protocol's
- * independent-contribution step.
- *
- * Payload shape:
- *
- * - `type`: always `broadcast`.
- * - `runId`: stable id shared by every event and trace object for the run.
- * - `at`: ISO-8601 timestamp for when the round finished.
- * - `round`: one-based broadcast round number.
- * - `contributions`: independent outputs collected for this round.
- * - `cost`: cumulative token and spend accounting after the round.
- */
-export interface BroadcastEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "broadcast";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** One-based broadcast round number. */
-  readonly round: number;
-  /** Independent contributions collected in this broadcast round. */
-  readonly contributions: readonly BroadcastContribution[];
-  /** Cumulative cost after this broadcast round. */
-  readonly cost: CostSummary;
-}
-
-/**
- * Event emitted when a workflow halts because a configured budget cap fired.
- *
- * @remarks
- * `budget-stop` records the normalized cap class that stopped execution before
- * the final event closes the run. The detail object is JSON-serializable so
- * callers can persist or replay the exact cap, observed value, and limit.
- */
-export interface BudgetStopEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "budget-stop";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Normalized machine-readable budget stop reason. */
-  readonly reason: BudgetStopReason;
-  /** Total cost at the stop point. */
-  readonly cost: CostSummary;
-  /** Completed model-turn iterations at the stop point. */
-  readonly iteration: number;
-  /** Elapsed runtime in milliseconds at the stop point. */
-  readonly elapsedMs: number;
-  /** Serializable cap diagnostics. */
-  readonly detail: JsonObject;
-}
-
-/**
- * Link from a terminal event to the completed trace transcript.
- *
- * @remarks
- * Final events are emitted before callers await {@link StreamHandle.result},
- * so this compact link tells streaming UIs exactly which transcript artifact
- * the terminal output closes over without duplicating every transcript entry
- * inside the event log.
- */
-export interface TranscriptLink {
-  /** Discriminant for future transcript link variants. */
-  readonly kind: "trace-transcript";
-  /** Number of transcript entries included in the completed trace. */
-  readonly entryCount: number;
-  /** Zero-based index of the last transcript entry, or `null` for empty runs. */
-  readonly lastEntryIndex: number | null;
-}
-
-/**
- * Event emitted when a workflow produces its final output.
- *
- * @remarks
- * `final` is the terminal streaming event for a successful run. Its `output`
- * value matches {@link RunResult.output}, and its `cost` value matches the
- * final aggregate cost returned on the result. Its `transcript` link points to
- * the completed {@link Trace.transcript} entries that produced the terminal
- * output.
- *
- * Payload shape:
- *
- * - `type`: always `final`.
- * - `runId`: stable id shared by every event and trace object for the run.
- * - `at`: ISO-8601 timestamp for when final synthesis completed.
- * - `output`: final synthesized answer returned to the caller.
- * - `cost`: total token and spend accounting for the run.
- * - `transcript`: compact link to the completed trace transcript.
- */
-export interface FinalEvent {
-  /** Discriminant for event rendering and exhaustive switches. */
-  readonly type: "final";
-  /** Stable run id shared by all events in one workflow. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Final synthesized answer returned as `RunResult.output`. */
-  readonly output: string;
-  /** Total cost at completion. */
-  readonly cost: CostSummary;
-  /** Link to the completed trace transcript. */
-  readonly transcript: TranscriptLink;
-  /** Optional normalized quality score supplied by a caller-owned evaluator. */
-  readonly quality?: NormalizedQualityScore;
-  /** Optional serializable evaluation payload supplied by a caller-owned evaluator. */
-  readonly evaluation?: RunEvaluation;
-  /** Termination condition that stopped the run, when the run ended by policy. */
-  readonly termination?: TerminationStopRecord;
-}
-
-/**
- * Successful coordination event emitted by Dogpile and persisted in traces.
- *
- * @remarks
- * `RunEvent` is the discriminated union stored in {@link Trace.events} and
- * used by low-level protocol emit callbacks. Switch on `type` to handle each
- * coordination moment exhaustively:
- *
- * - `role-assignment`: participant/role roster was established.
- * - `model-request`: one provider-neutral model request was started.
- * - `model-response`: one provider-neutral model response completed.
- * - `model-output-chunk`: one streaming model text delta arrived.
- * - `tool-call`: one runtime tool invocation was started.
- * - `tool-result`: one runtime tool invocation completed.
- * - `agent-turn`: one agent completed a prompt/response turn.
- * - `broadcast`: a broadcast round gathered independent contributions.
- * - `budget-stop`: a configured budget cap halted further model turns.
- * - `final`: the run completed and produced the final output.
- *
- * Every variant is JSON-serializable and includes `runId` plus an ISO-8601
- * `at` timestamp so callers can persist, render, or replay the event log
- * without SDK-owned storage.
- *
- * @example
- * ```ts
- * for await (const event of Dogpile.stream(options)) {
- *   switch (event.type) {
- *     case "agent-turn":
- *       console.log(event.agentId, event.output);
- *       break;
- *     case "final":
- *       console.log(event.output);
- *       break;
- *   }
- * }
- * ```
- */
-export type RunEvent =
-  | RoleAssignmentEvent
-  | ModelRequestEvent
-  | ModelResponseEvent
-  | ModelOutputChunkEvent
-  | ToolCallEvent
-  | ToolResultEvent
-  | TurnEvent
-  | BroadcastEvent
-  | BudgetStopEvent
-  | FinalEvent;
-
-/**
- * Model activity events yielded by `stream()` and persisted in traces when a
- * protocol exposes provider-call boundaries.
- */
-export type ModelActivityEvent = ModelRequestEvent | ModelResponseEvent | ModelOutputChunkEvent;
-
-/**
- * Tool activity events yielded by `stream()` and persisted in traces when a
- * protocol or caller-owned adapter invokes runtime tools.
- */
-export type ToolActivityEvent = ToolCallEvent | ToolResultEvent;
-
-/**
- * Lifecycle event yielded by `stream()`.
- *
- * These events describe workflow coordination state rather than model text.
- * Role assignment establishes the participant roster, while `budget-stop`
- * records a lifecycle halt before the terminal completion event.
- */
-export type StreamLifecycleEvent = RoleAssignmentEvent | BudgetStopEvent;
-
-/**
- * Output event yielded by `stream()`.
- *
- * These events carry generated agent output or grouped round output while a
- * workflow is still running.
- */
-export type StreamOutputEvent = ModelActivityEvent | ToolActivityEvent | TurnEvent | BroadcastEvent;
-
-/**
- * Error event yielded by `stream()` when execution rejects.
- *
- * @remarks
- * Stream errors are emitted before {@link StreamHandle.result} rejects so UIs
- * and log collectors can record a terminal failure without wrapping the result
- * promise. The error payload is JSON-serializable and intentionally omits
- * runtime-specific values such as `Error.stack`.
- */
-export interface StreamErrorEvent {
-  /** Discriminant for stream event handling. */
-  readonly type: "error";
-  /** Stable run id when known; empty when failure happened before protocol startup. */
-  readonly runId: string;
-  /** ISO-8601 event timestamp. */
-  readonly at: string;
-  /** Error name when available. */
-  readonly name: string;
-  /** Human-readable error message. */
-  readonly message: string;
-  /** Optional serializable diagnostics supplied by the SDK. */
-  readonly detail?: JsonObject;
-}
-
-/**
- * Completion event yielded by `stream()` after successful execution.
- */
-export type StreamCompletionEvent = FinalEvent;
-
-/**
- * Public streaming event union returned by `stream()`.
- *
- * @remarks
- * The union is grouped into lifecycle, output, error, and completion families:
- *
- * - lifecycle: {@link StreamLifecycleEvent}
- * - output: {@link StreamOutputEvent}
- * - error: {@link StreamErrorEvent}
- * - completion: {@link StreamCompletionEvent}
- *
- * Successful stream events are also persisted as {@link RunEvent} values in the
- * completed trace. `error` is stream-only because a failed run has no completed
- * {@link RunResult} trace to return.
- */
-export type StreamEvent = StreamLifecycleEvent | StreamOutputEvent | StreamErrorEvent | StreamCompletionEvent;
 
 /**
  * Lifecycle status for a live {@link StreamHandle}.

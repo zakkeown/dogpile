@@ -7,7 +7,7 @@ import {
   type ModelRequest,
   type ModelResponse
 } from "../index.js";
-import { createVercelAIProvider, type VercelAIGenerateTextFunction } from "../providers/vercel-ai.js";
+import { createVercelAIProvider, type VercelAIGenerateTextFunction } from "../internal/vercel-ai.js";
 
 const model = "openai/gpt-4.1-mini" as LanguageModel;
 

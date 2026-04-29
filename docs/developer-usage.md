@@ -321,6 +321,38 @@ const codeExec = createCodeExecToolAdapter({
 Use `validateInput` on custom `RuntimeTool` objects for deterministic,
 side-effect-free checks that should run before `execute()`.
 
+### Web Search Adapter Threat Model
+
+The built-in `webSearch` adapter forwards caller-supplied `endpoint`/headers
+together with a model-generated `query`. That combination creates two risks
+that callers must address — Dogpile does not enforce any of them by default:
+
+- **Host allowlist.** If `endpoint` or a custom `WebSearchFetchRequestBuilder`
+  ever reads from caller-controlled state (user input, model output, env), a
+  confused-deputy issue can redirect requests. Constrain the allowed hosts
+  explicitly inside your `WebSearchFetch` implementation, and reject any URL
+  outside the list before issuing the network call.
+- **Header redaction.** Auth tokens or upstream credentials threaded through
+  request headers will land in the trace if they appear in
+  `RuntimeToolCallEvent.input` or `RuntimeToolResultEvent.output`. Strip them
+  inside your `WebSearchFetchRequestBuilder` and your `parseResponse`.
+- **Response size cap.** A malicious or misbehaving search backend can return
+  a response large enough to inflate the trace and the event log. Enforce a
+  byte cap inside `parseResponse` (read with a size-bounded reader, or check
+  `Content-Length`) and surface a typed error rather than passing the payload
+  through.
+
+### OpenAI-Compatible Provider And SSRF
+
+`createOpenAICompatibleProvider({ baseURL })` is a thin HTTP adapter — Dogpile
+does not allowlist hosts because doing so would violate provider neutrality.
+If a downstream consumer ever reflects user input into `baseURL`, the SDK will
+happily talk to internal addresses.
+
+When the consumer cannot statically pin `baseURL`, validate it before passing
+it in: parse with `URL`, reject anything that resolves to private/loopback
+ranges, and allowlist the known providers your application actually supports.
+
 ## Replay And Persistence
 
 Dogpile does not store anything for you. Persist the artifact your application
@@ -346,6 +378,25 @@ console.log(replayed.transcript.length);
 
 Replay never calls a provider. It reconstructs the public result shape from the
 trace you already saved.
+
+### Replay Determinism Rules
+
+Traces must be JSON-serializable end-to-end so saved traces survive cold
+storage and round-trip through `replay()`. When you extend events, results,
+or trace artifacts (in your own forks or with caller-supplied
+`metadata`/`detail`), keep the values JSON-primitive:
+
+- Use ISO-8601 strings, not `Date` instances.
+- Use plain `Record<string, JsonValue>`, not `Map` or `Set`.
+- Avoid `bigint` — they do not survive `JSON.stringify`.
+- Avoid sparse arrays and `undefined` slots — `JSON.stringify` drops them
+  silently and `replay()` will not reconstruct them.
+- Avoid functions, class instances, or circular references.
+
+The `src/tests/result-contract.test.ts` and
+`src/tests/replay-version-skew.test.ts` gates assert this contract. A frozen
+v0.3 trace fixture lives at `src/tests/fixtures/replay-trace-v0_3.json` and
+must round-trip through every published `replay()`.
 
 ## Error Handling
 
@@ -377,6 +428,102 @@ Common application branches:
   with backoff or fail over.
 - `provider-authentication`, `provider-not-found`, `provider-unsupported`: fix
   credentials, model id, or feature choice.
+
+## Retrying Provider Failures
+
+`withRetry` wraps any `ConfiguredModelProvider` with a transient-failure retry
+policy. The wrapper preserves provider neutrality — it is opt-in, has no peer
+dependencies, and never inspects the underlying SDK.
+
+```ts
+import { createOpenAICompatibleProvider, Dogpile, withRetry } from "@dogpile/sdk";
+
+const rawProvider = createOpenAICompatibleProvider({
+  baseURL: "https://api.openai.com/v1",
+  apiKey: process.env.OPENAI_API_KEY!,
+  defaultModel: "gpt-4o-mini"
+});
+
+const robustProvider = withRetry(rawProvider, {
+  maxAttempts: 4,
+  baseDelayMs: 500,
+  maxDelayMs: 8_000,
+  jitter: "full",
+  onRetry: ({ attempt, delayMs, error, providerId }) => {
+    console.warn(`provider ${providerId} retry #${attempt} in ${delayMs}ms`, error);
+  }
+});
+
+await Dogpile.pile({ intent: "Summarize the release.", model: robustProvider });
+```
+
+By default, `withRetry`:
+
+- Retries `DogpileError` codes `provider-rate-limited`, `provider-timeout`,
+  and `provider-unavailable`. Never retries `aborted` or
+  `invalid-configuration`.
+- Treats `TypeError` (the typical fetch network-failure shape) as retryable.
+- Honors `error.detail.retryAfterMs` from `DogpileError` when no policy
+  override is supplied — useful when your adapter surfaces upstream
+  `Retry-After` headers.
+- Short-circuits immediately when the request `AbortSignal` is aborted, both
+  before each attempt and during the backoff sleep. Cancellation always wins.
+- Forwards `provider.stream()` through unchanged. Streaming retries are not
+  automated because partial chunks may already have been observed.
+
+Pass a custom `retryOn` predicate to retry on adapter-specific error shapes,
+or `delayForError` to honor a non-Dogpile `Retry-After` style hint.
+
+## Structured Logging
+
+`Logger` is a small structured-logging seam: four severity methods that take a
+message and an optional JSON-shaped field bag. `loggerFromEvents` bridges any
+`Logger` to a stream handle so a caller does not have to write the
+event-to-log mapping themselves.
+
+```ts
+import {
+  Dogpile,
+  consoleLogger,
+  loggerFromEvents
+} from "@dogpile/sdk";
+
+const logger = consoleLogger({ level: "info" });
+
+const handle = Dogpile.stream({ intent: "Plan the migration.", model });
+handle.subscribe(loggerFromEvents(logger));
+
+const result = await handle.result;
+```
+
+Wire pino, winston, or any other logger by implementing four methods:
+
+```ts
+import pino from "pino";
+import { Dogpile, loggerFromEvents, type Logger } from "@dogpile/sdk";
+
+const pinoBase = pino({ level: "info" });
+const logger: Logger = {
+  debug: (message, fields) => pinoBase.debug({ ...fields }, message),
+  info: (message, fields) => pinoBase.info({ ...fields }, message),
+  warn: (message, fields) => pinoBase.warn({ ...fields }, message),
+  error: (message, fields) => pinoBase.error({ ...fields }, message)
+};
+
+const handle = Dogpile.stream({ intent, model });
+handle.subscribe(loggerFromEvents(logger, { include: ["agent-turn", "budget-stop", "error"] }));
+```
+
+Defaults applied by `loggerFromEvents`:
+
+- `model-output-chunk` events log at `debug`.
+- `budget-stop` and `tool-result` errors log at `warn`.
+- Stream `error` events log at `error`.
+- Everything else logs at `info`.
+
+Override per event via `levelFor`. A logger that throws is caught and routed
+to the same logger's `error` channel — a misbehaving logger cannot crash an
+in-flight run.
 
 ## Browser Usage
 

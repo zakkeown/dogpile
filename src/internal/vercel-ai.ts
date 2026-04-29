@@ -1,3 +1,13 @@
+/**
+ * Repo-internal Vercel AI adapter. NOT a published surface.
+ *
+ * This module is intentionally located under `src/internal/` and is not
+ * referenced by `package.json#exports` or `package.json#files`. It exists
+ * solely so the test suite can exercise the broader runtime against a
+ * representative non-OpenAI provider shape. Adding it to the public exports
+ * would force `ai` to become a peer dependency, contradicting the
+ * provider-neutral, no-required-peer-SDK promise in CLAUDE.md.
+ */
 import { generateText as defaultGenerateText, streamText as defaultStreamText } from "ai";
 import type {
   CallWarning,
