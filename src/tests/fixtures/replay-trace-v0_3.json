@@ -1,0 +1,346 @@
+{
+  "agentsUsed": [
+    {
+      "id": "agent-1",
+      "role": "planner"
+    },
+    {
+      "id": "agent-2",
+      "role": "critic"
+    }
+  ],
+  "budget": {
+    "caps": {
+      "maxTokens": 500,
+      "maxUsd": 1,
+      "qualityWeight": 0.8
+    },
+    "kind": "replay-trace-budget",
+    "termination": {
+      "kind": "budget",
+      "maxTokens": 500,
+      "maxUsd": 1
+    },
+    "tier": "balanced"
+  },
+  "budgetStateChanges": [
+    {
+      "at": "2026-04-29T18:06:53.148Z",
+      "cost": {
+        "inputTokens": 7,
+        "outputTokens": 4,
+        "totalTokens": 11,
+        "usd": 0.0001
+      },
+      "eventIndex": 2,
+      "eventType": "agent-turn",
+      "kind": "replay-trace-budget-state-change"
+    },
+    {
+      "at": "2026-04-29T18:06:53.148Z",
+      "cost": {
+        "inputTokens": 27,
+        "outputTokens": 11,
+        "totalTokens": 38,
+        "usd": 0.0002
+      },
+      "eventIndex": 3,
+      "eventType": "agent-turn",
+      "kind": "replay-trace-budget-state-change"
+    },
+    {
+      "at": "2026-04-29T18:06:53.148Z",
+      "cost": {
+        "inputTokens": 27,
+        "outputTokens": 11,
+        "totalTokens": 38,
+        "usd": 0.0002
+      },
+      "eventIndex": 4,
+      "eventType": "final",
+      "kind": "replay-trace-budget-state-change"
+    }
+  ],
+  "events": [
+    {
+      "agentId": "agent-1",
+      "at": "2026-04-29T18:06:53.146Z",
+      "role": "planner",
+      "runId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4",
+      "type": "role-assignment"
+    },
+    {
+      "agentId": "agent-2",
+      "at": "2026-04-29T18:06:53.147Z",
+      "role": "critic",
+      "runId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4",
+      "type": "role-assignment"
+    },
+    {
+      "agentId": "agent-1",
+      "at": "2026-04-29T18:06:53.148Z",
+      "cost": {
+        "inputTokens": 7,
+        "outputTokens": 4,
+        "totalTokens": 11,
+        "usd": 0.0001
+      },
+      "input": "Mission: Frozen replay-version-skew fixture.\nProvide your contribution.",
+      "output": "planner:agent-1 framed the mission.",
+      "role": "planner",
+      "runId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4",
+      "type": "agent-turn"
+    },
+    {
+      "agentId": "agent-2",
+      "at": "2026-04-29T18:06:53.148Z",
+      "cost": {
+        "inputTokens": 27,
+        "outputTokens": 11,
+        "totalTokens": 38,
+        "usd": 0.0002
+      },
+      "input": "Mission: Frozen replay-version-skew fixture.\n\nPrior contributions:\nplanner (agent-1): planner:agent-1 framed the mission.\n\nContinue the sequence with a useful next contribution.",
+      "output": "critic:agent-2 refined the mission using prior work.",
+      "role": "critic",
+      "runId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4",
+      "type": "agent-turn"
+    },
+    {
+      "at": "2026-04-29T18:06:53.148Z",
+      "cost": {
+        "inputTokens": 27,
+        "outputTokens": 11,
+        "totalTokens": 38,
+        "usd": 0.0002
+      },
+      "output": "critic:agent-2 refined the mission using prior work.",
+      "runId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4",
+      "transcript": {
+        "entryCount": 2,
+        "kind": "trace-transcript",
+        "lastEntryIndex": 1
+      },
+      "type": "final"
+    }
+  ],
+  "finalOutput": {
+    "completedAt": "2026-04-29T18:06:53.148Z",
+    "cost": {
+      "inputTokens": 27,
+      "outputTokens": 11,
+      "totalTokens": 38,
+      "usd": 0.0002
+    },
+    "kind": "replay-trace-final-output",
+    "output": "critic:agent-2 refined the mission using prior work.",
+    "transcript": {
+      "entryCount": 2,
+      "kind": "trace-transcript",
+      "lastEntryIndex": 1
+    }
+  },
+  "inputs": {
+    "agents": [
+      {
+        "id": "agent-1",
+        "role": "planner"
+      },
+      {
+        "id": "agent-2",
+        "role": "critic"
+      }
+    ],
+    "intent": "Frozen replay-version-skew fixture.",
+    "kind": "replay-trace-run-inputs",
+    "modelProviderId": "v0_3-replay-fixture",
+    "protocol": {
+      "kind": "sequential",
+      "maxTurns": 2
+    },
+    "temperature": 0.2,
+    "tier": "balanced"
+  },
+  "modelProviderId": "v0_3-replay-fixture",
+  "protocol": "sequential",
+  "protocolDecisions": [
+    {
+      "agentId": "agent-1",
+      "at": "2026-04-29T18:06:53.146Z",
+      "decision": "assign-role",
+      "eventIndex": 0,
+      "eventType": "role-assignment",
+      "kind": "replay-trace-protocol-decision",
+      "protocol": "sequential",
+      "role": "planner"
+    },
+    {
+      "agentId": "agent-2",
+      "at": "2026-04-29T18:06:53.147Z",
+      "decision": "assign-role",
+      "eventIndex": 1,
+      "eventType": "role-assignment",
+      "kind": "replay-trace-protocol-decision",
+      "protocol": "sequential",
+      "role": "critic"
+    },
+    {
+      "agentId": "agent-1",
+      "at": "2026-04-29T18:06:53.148Z",
+      "cost": {
+        "inputTokens": 7,
+        "outputTokens": 4,
+        "totalTokens": 11,
+        "usd": 0.0001
+      },
+      "decision": "select-agent-turn",
+      "eventIndex": 2,
+      "eventType": "agent-turn",
+      "input": "Mission: Frozen replay-version-skew fixture.\nProvide your contribution.",
+      "kind": "replay-trace-protocol-decision",
+      "output": "planner:agent-1 framed the mission.",
+      "protocol": "sequential",
+      "role": "planner",
+      "transcriptEntryCount": 1,
+      "turn": 1
+    },
+    {
+      "agentId": "agent-2",
+      "at": "2026-04-29T18:06:53.148Z",
+      "cost": {
+        "inputTokens": 27,
+        "outputTokens": 11,
+        "totalTokens": 38,
+        "usd": 0.0002
+      },
+      "decision": "select-agent-turn",
+      "eventIndex": 3,
+      "eventType": "agent-turn",
+      "input": "Mission: Frozen replay-version-skew fixture.\n\nPrior contributions:\nplanner (agent-1): planner:agent-1 framed the mission.\n\nContinue the sequence with a useful next contribution.",
+      "kind": "replay-trace-protocol-decision",
+      "output": "critic:agent-2 refined the mission using prior work.",
+      "protocol": "sequential",
+      "role": "critic",
+      "transcriptEntryCount": 2,
+      "turn": 2
+    },
+    {
+      "at": "2026-04-29T18:06:53.148Z",
+      "cost": {
+        "inputTokens": 27,
+        "outputTokens": 11,
+        "totalTokens": 38,
+        "usd": 0.0002
+      },
+      "decision": "finalize-output",
+      "eventIndex": 4,
+      "eventType": "final",
+      "kind": "replay-trace-protocol-decision",
+      "output": "critic:agent-2 refined the mission using prior work.",
+      "protocol": "sequential",
+      "transcriptEntryCount": 2
+    }
+  ],
+  "providerCalls": [
+    {
+      "agentId": "agent-1",
+      "callId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4:provider-call:1",
+      "completedAt": "2026-04-29T18:06:53.147Z",
+      "kind": "replay-trace-provider-call",
+      "providerId": "v0_3-replay-fixture",
+      "request": {
+        "messages": [
+          {
+            "content": "You are agent-1, acting as planner in a Sequential multi-agent protocol.",
+            "role": "system"
+          },
+          {
+            "content": "Mission: Frozen replay-version-skew fixture.\nProvide your contribution.",
+            "role": "user"
+          }
+        ],
+        "metadata": {
+          "agentId": "agent-1",
+          "protocol": "sequential",
+          "role": "planner",
+          "runId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4",
+          "tier": "balanced",
+          "turn": 1
+        },
+        "temperature": 0.2
+      },
+      "response": {
+        "costUsd": 0.0001,
+        "text": "planner:agent-1 framed the mission.",
+        "usage": {
+          "inputTokens": 7,
+          "outputTokens": 4,
+          "totalTokens": 11
+        }
+      },
+      "role": "planner",
+      "startedAt": "2026-04-29T18:06:53.147Z"
+    },
+    {
+      "agentId": "agent-2",
+      "callId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4:provider-call:2",
+      "completedAt": "2026-04-29T18:06:53.148Z",
+      "kind": "replay-trace-provider-call",
+      "providerId": "v0_3-replay-fixture",
+      "request": {
+        "messages": [
+          {
+            "content": "You are agent-2, acting as critic in a Sequential multi-agent protocol.",
+            "role": "system"
+          },
+          {
+            "content": "Mission: Frozen replay-version-skew fixture.\n\nPrior contributions:\nplanner (agent-1): planner:agent-1 framed the mission.\n\nContinue the sequence with a useful next contribution.",
+            "role": "user"
+          }
+        ],
+        "metadata": {
+          "agentId": "agent-2",
+          "protocol": "sequential",
+          "role": "critic",
+          "runId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4",
+          "tier": "balanced",
+          "turn": 2
+        },
+        "temperature": 0.2
+      },
+      "response": {
+        "costUsd": 0.0001,
+        "text": "critic:agent-2 refined the mission using prior work.",
+        "usage": {
+          "inputTokens": 20,
+          "outputTokens": 7,
+          "totalTokens": 27
+        }
+      },
+      "role": "critic",
+      "startedAt": "2026-04-29T18:06:53.148Z"
+    }
+  ],
+  "runId": "0cf00e38-c9f0-45f5-8fbb-f4452e4869f4",
+  "schemaVersion": "1.0",
+  "seed": {
+    "kind": "replay-trace-seed",
+    "source": "none",
+    "value": null
+  },
+  "tier": "balanced",
+  "transcript": [
+    {
+      "agentId": "agent-1",
+      "input": "Mission: Frozen replay-version-skew fixture.\nProvide your contribution.",
+      "output": "planner:agent-1 framed the mission.",
+      "role": "planner"
+    },
+    {
+      "agentId": "agent-2",
+      "input": "Mission: Frozen replay-version-skew fixture.\n\nPrior contributions:\nplanner (agent-1): planner:agent-1 framed the mission.\n\nContinue the sequence with a useful next contribution.",
+      "output": "critic:agent-2 refined the mission using prior work.",
+      "role": "critic"
+    }
+  ]
+}
