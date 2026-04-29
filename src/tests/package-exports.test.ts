@@ -1125,6 +1125,7 @@ describe("package exports", () => {
       "src/runtime/decisions.ts",
       "src/runtime/defaults.ts",
       "src/runtime/engine.ts",
+      "src/runtime/ids.ts",
       "src/runtime/model.ts",
       "src/runtime/sequential.ts",
       "src/runtime/shared.ts",

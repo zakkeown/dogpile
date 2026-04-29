@@ -1,7 +1,7 @@
 import type { LanguageModel } from "ai";
 import { describe, expect, it } from "vitest";
 import { createEngine, createRuntimeToolExecutor, DogpileError, run, stream } from "../index.js";
-import { createVercelAIProvider } from "../providers/vercel-ai.js";
+import { createVercelAIProvider } from "../internal/vercel-ai.js";
 import type {
   ConfiguredModelProvider,
   DogpileOptions,

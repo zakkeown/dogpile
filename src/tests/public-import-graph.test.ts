@@ -27,6 +27,7 @@ const FORBIDDEN = [
   "src/demo.ts",
   "src/benchmark/",
   "src/testing/",
+  "src/internal/",
   "src/providers/vercel-ai.ts"
 ];
 
