@@ -1,22 +1,27 @@
+import { DogpileError } from "../types.js";
 import type {
   AgentSpec,
   ConfiguredModelProvider,
   CoordinatorProtocolConfig,
   CostSummary,
+  DelegateAgentDecision,
   DogpileOptions,
   JsonObject,
   JsonValue,
   ModelRequest,
   ModelResponse,
+  ProtocolSelection,
   ReplayTraceProtocolDecision,
   ReplayTraceProviderCall,
   RuntimeTool,
   RuntimeToolExecutor,
   RunEvent,
   RunResult,
+  SubRunFailedEvent,
   TerminationCondition,
   TerminationStopRecord,
   Tier,
+  Trace,
   TranscriptEntry
 } from "../types.js";
 import { createRunId, elapsedMs, nowMs, providerCallIdFor } from "./ids.js";
@@ -43,6 +48,28 @@ import { evaluateTerminationStop, warnOnProtocolTerminationMisconfiguration } fr
 import { createRuntimeToolExecutor, executeModelResponseToolRequests, runtimeToolAvailability } from "./tools.js";
 import { createWrapUpHintController } from "./wrap-up.js";
 
+/**
+ * Callback to invoke a child run via the engine's `runProtocol` switch. Passed
+ * in by `engine.ts` so coordinator avoids a circular import.
+ */
+export type RunProtocolFn = (input: {
+  readonly intent: string;
+  readonly protocol: ProtocolSelection;
+  readonly tier: Tier;
+  readonly model: ConfiguredModelProvider;
+  readonly agents: readonly AgentSpec[];
+  readonly tools: readonly RuntimeTool<JsonObject, JsonValue>[];
+  readonly temperature: number;
+  readonly budget?: DogpileOptions["budget"];
+  readonly seed?: string | number;
+  readonly signal?: AbortSignal;
+  readonly terminate?: TerminationCondition;
+  readonly wrapUpHint?: DogpileOptions["wrapUpHint"];
+  readonly emit?: (event: RunEvent) => void;
+  readonly currentDepth?: number;
+  readonly effectiveMaxDepth?: number;
+}) => Promise<RunResult>;
+
 interface CoordinatorRunOptions {
   readonly intent: string;
   readonly protocol: CoordinatorProtocolConfig;
@@ -57,7 +84,31 @@ interface CoordinatorRunOptions {
   readonly terminate?: TerminationCondition;
   readonly wrapUpHint?: DogpileOptions["wrapUpHint"];
   readonly emit?: (event: RunEvent) => void;
+  /**
+   * Recursion depth of this coordinator run. Top-level callers pass 0; child
+   * sub-runs receive parent depth + 1 from the dispatch loop.
+   */
+  readonly currentDepth?: number;
+  /**
+   * Effective max recursion depth resolved at run start. Plan 04 enforces;
+   * Plan 03 only plumbs the value.
+   */
+  readonly effectiveMaxDepth?: number;
+  /**
+   * Engine `runProtocol` callback used by the delegate dispatch loop to
+   * recursively run a child protocol. Optional so unit tests that exercise
+   * the coordinator without the engine wrapper still typecheck — when omitted,
+   * delegate dispatch falls back to throwing `invalid-configuration`.
+   */
+  readonly runProtocol?: RunProtocolFn;
 }
+
+/**
+ * Hard-coded loop guard for the delegate dispatch in the coordinator plan
+ * turn. After this many consecutive delegate decisions the coordinator throws
+ * `invalid-configuration` (T-03-01). Not a public option.
+ */
+const MAX_DISPATCH_PER_TURN = 8;
 
 export async function runCoordinator(options: CoordinatorRunOptions): Promise<RunResult> {
   const runId = createRunId();
@@ -126,24 +177,68 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
 
   if (coordinator) {
     if (!stopIfNeeded()) {
-      totalCost = await runCoordinatorTurn({
-        agent: coordinator,
-        coordinator,
-        input: buildCoordinatorPlanInput(options.intent, coordinator),
-        phase: "plan",
-        options,
-        runId,
-        transcript,
-        totalCost,
-        providerCalls,
-        toolExecutor,
-        toolAvailability,
-        events,
-        startedAtMs,
-        wrapUpHint,
-        emit,
-        recordProtocolDecision
-      });
+      // Delegate dispatch loop (D-11/D-16/D-17/D-18). Phase 1 limits delegation
+      // to the coordinator's plan turn; workers cannot delegate. The loop
+      // re-issues the coordinator plan turn after each successful sub-run with
+      // the projected D-17 result tagged into the next prompt and a synthetic
+      // D-18 transcript entry already appended. `partialTrace` for failed
+      // sub-runs is captured via a tee'd emit buffer locally — `runProtocol`'s
+      // error contract is unchanged.
+      let dispatchInput = buildCoordinatorPlanInput(options.intent, coordinator);
+      let dispatchCount = 0;
+      while (true) {
+        const turnOutcome = await runCoordinatorTurn({
+          agent: coordinator,
+          coordinator,
+          input: dispatchInput,
+          phase: "plan",
+          options,
+          runId,
+          transcript,
+          totalCost,
+          providerCalls,
+          toolExecutor,
+          toolAvailability,
+          events,
+          startedAtMs,
+          wrapUpHint,
+          emit,
+          recordProtocolDecision
+        });
+        totalCost = turnOutcome.totalCost;
+
+        if (turnOutcome.decision?.type !== "delegate") {
+          break;
+        }
+
+        if (dispatchCount >= MAX_DISPATCH_PER_TURN) {
+          throw new DogpileError({
+            code: "invalid-configuration",
+            message: `Coordinator plan turn delegated more than ${MAX_DISPATCH_PER_TURN} times without participating`,
+            retryable: false,
+            detail: {
+              kind: "delegate-validation",
+              path: "decision",
+              reason: "loop-guard-exceeded",
+              maxDispatchPerTurn: MAX_DISPATCH_PER_TURN
+            }
+          });
+        }
+        dispatchCount += 1;
+
+        const parentDecisionId = String(events.length - 1);
+        const dispatchResult = await dispatchDelegate({
+          decision: turnOutcome.decision,
+          parentDecisionId,
+          parentDepth: options.currentDepth ?? 0,
+          parentRunId: runId,
+          options,
+          transcript,
+          emit,
+          recordProtocolDecision
+        });
+        dispatchInput = dispatchResult.nextInput;
+      }
       stopIfNeeded();
     }
 
@@ -209,7 +304,7 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
     }
 
     if (!stopIfNeeded()) {
-      totalCost = await runCoordinatorTurn({
+      const synthesisOutcome = await runCoordinatorTurn({
         agent: coordinator,
         coordinator,
         input: buildFinalSynthesisInput(options.intent, transcript, coordinator),
@@ -227,6 +322,20 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
         emit,
         recordProtocolDecision
       });
+      totalCost = synthesisOutcome.totalCost;
+      // Phase 1: final-synthesis turn cannot delegate.
+      if (synthesisOutcome.decision?.type === "delegate") {
+        throw new DogpileError({
+          code: "invalid-configuration",
+          message: "Coordinator final-synthesis turn cannot emit a delegate decision in Phase 1",
+          retryable: false,
+          detail: {
+            kind: "delegate-validation",
+            path: "decision",
+            phase: "final-synthesis"
+          }
+        });
+      }
       stopIfNeeded();
     }
   }
@@ -380,7 +489,12 @@ interface CoordinatorTurnOptions {
   ) => void;
 }
 
-async function runCoordinatorTurn(turn: CoordinatorTurnOptions): Promise<CostSummary> {
+interface CoordinatorTurnResult {
+  readonly totalCost: CostSummary;
+  readonly decision: ReturnType<typeof parseAgentDecision>;
+}
+
+async function runCoordinatorTurn(turn: CoordinatorTurnOptions): Promise<CoordinatorTurnResult> {
   throwIfAborted(turn.options.signal, turn.options.model.id);
 
   const request: ModelRequest = {
@@ -430,7 +544,9 @@ async function runCoordinatorTurn(turn: CoordinatorTurnOptions): Promise<CostSum
       turn.providerCalls.push(call);
     }
   });
-  const decision = parseAgentDecision(response.text);
+  const decision = parseAgentDecision(response.text, {
+    parentProviderId: turn.options.model.id
+  });
   const totalCost = addCost(turn.totalCost, responseCost(response));
   const toolCalls = await executeModelResponseToolRequests({
     response,
@@ -471,7 +587,7 @@ async function runCoordinatorTurn(turn: CoordinatorTurnOptions): Promise<CostSum
     transcriptEntryCount: turn.transcript.length
   });
 
-  return totalCost;
+  return { totalCost, decision };
 }
 
 interface CoordinatorWorkerTurnOptions {
@@ -553,7 +669,21 @@ async function runCoordinatorWorkerTurn(turn: CoordinatorWorkerTurnOptions): Pro
       turn.providerCallSlots[turn.providerCallIndex] = call;
     }
   });
-  const decision = parseAgentDecision(response.text);
+  const decision = parseAgentDecision(response.text, {
+    parentProviderId: turn.options.model.id
+  });
+  if (decision?.type === "delegate") {
+    throw new DogpileError({
+      code: "invalid-configuration",
+      message: "Workers cannot emit delegate decisions in Phase 1",
+      retryable: false,
+      detail: {
+        kind: "delegate-validation",
+        path: "decision",
+        phase: "worker"
+      }
+    });
+  }
   const toolCalls = await executeModelResponseToolRequests({
     response,
     executor: turn.toolExecutor,
@@ -617,6 +747,323 @@ function responseCost(response: ModelResponse): CostSummary {
     inputTokens: response.usage?.inputTokens ?? 0,
     outputTokens: response.usage?.outputTokens ?? 0,
     totalTokens: response.usage?.totalTokens ?? 0
+  };
+}
+
+interface DispatchDelegateOptions {
+  readonly decision: DelegateAgentDecision;
+  readonly parentDecisionId: string;
+  readonly parentDepth: number;
+  readonly parentRunId: string;
+  readonly options: CoordinatorRunOptions;
+  readonly transcript: TranscriptEntry[];
+  readonly emit: (event: RunEvent) => void;
+  readonly recordProtocolDecision: (
+    event: RunEvent,
+    decisionOptions?: { readonly transcriptEntryCount?: number }
+  ) => void;
+}
+
+interface DispatchDelegateResult {
+  readonly nextInput: string;
+}
+
+/**
+ * Dispatch a single delegate decision as a recursive sub-run.
+ *
+ * D-11: child reuses the parent provider object verbatim.
+ * D-16: `recursive: true` flag set when both parent and child protocol are
+ *   `coordinator`.
+ * D-17: tagged result text appended to the next coordinator prompt.
+ * D-18: synthetic transcript entry pushed for replay/provenance.
+ *
+ * On thrown error from the child engine, builds `partialTrace` from a locally
+ * tee'd `childEvents` buffer — `runProtocol`'s error contract is unchanged.
+ */
+async function dispatchDelegate(input: DispatchDelegateOptions): Promise<DispatchDelegateResult> {
+  const { decision, options } = input;
+  const childRunId = createRunId();
+  const recursive = decision.protocol === "coordinator";
+  const parentTimeoutMs = options.budget?.timeoutMs;
+  const decisionTimeoutMs = decision.budget?.timeoutMs;
+
+  // Compute remaining time per D-12 / planner Q3. If parent has no timeoutMs,
+  // child has none either. If decision overrides exceed parent's remaining,
+  // throw `invalid-configuration` per the plan.
+  let childTimeoutMs: number | undefined;
+  if (parentTimeoutMs !== undefined) {
+    const remainingMs = Math.max(0, parentTimeoutMs);
+    if (decisionTimeoutMs !== undefined) {
+      if (decisionTimeoutMs > remainingMs) {
+        throw new DogpileError({
+          code: "invalid-configuration",
+          message: `delegate decision budget.timeoutMs (${decisionTimeoutMs}) exceeds parent's remaining timeout (${remainingMs})`,
+          retryable: false,
+          detail: {
+            kind: "delegate-validation",
+            path: "decision.budget.timeoutMs",
+            expected: `<= ${remainingMs}`,
+            received: String(decisionTimeoutMs)
+          }
+        });
+      }
+      childTimeoutMs = decisionTimeoutMs;
+    } else {
+      childTimeoutMs = remainingMs;
+    }
+  } else if (decisionTimeoutMs !== undefined) {
+    childTimeoutMs = decisionTimeoutMs;
+  }
+
+  if (!options.runProtocol) {
+    throw new DogpileError({
+      code: "invalid-configuration",
+      message:
+        "Coordinator delegate dispatch requires the engine `runProtocol` callback. " +
+        "Use `Dogpile.run` / `createEngine` rather than calling `runCoordinator` directly when delegate is in play.",
+      retryable: false,
+      detail: {
+        kind: "delegate-validation",
+        path: "runProtocol"
+      }
+    });
+  }
+
+  // Buffered tee for partialTrace capture — see Plan 03 step 8.
+  const childEvents: RunEvent[] = [];
+  const parentEmit = input.emit;
+  const teedEmit = (event: RunEvent): void => {
+    childEvents.push(event);
+    options.emit?.(event);
+  };
+  const childStartedAt = Date.now();
+
+  const startEvent: RunEvent = {
+    type: "sub-run-started",
+    runId: input.parentRunId,
+    at: new Date().toISOString(),
+    childRunId,
+    parentRunId: input.parentRunId,
+    parentDecisionId: input.parentDecisionId,
+    protocol: decision.protocol,
+    intent: decision.intent,
+    depth: input.parentDepth + 1,
+    ...(recursive ? { recursive: true } : {})
+  };
+  parentEmit(startEvent);
+  input.recordProtocolDecision(startEvent);
+
+  const childOptions = {
+    intent: decision.intent,
+    protocol: decision.protocol,
+    tier: options.tier,
+    model: options.model, // D-11: same provider instance verbatim
+    agents: options.agents,
+    tools: options.tools,
+    temperature: options.temperature,
+    ...(childTimeoutMs !== undefined ? { budget: { timeoutMs: childTimeoutMs } } : {}),
+    ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    emit: teedEmit,
+    currentDepth: input.parentDepth + 1,
+    ...(options.effectiveMaxDepth !== undefined ? { effectiveMaxDepth: options.effectiveMaxDepth } : {})
+  };
+
+  let subResult: RunResult;
+  try {
+    subResult = await options.runProtocol(childOptions);
+  } catch (error) {
+    const failedDecision: JsonObject = {
+      type: "delegate",
+      protocol: decision.protocol,
+      intent: decision.intent,
+      ...(decision.model !== undefined ? { model: decision.model } : {}),
+      ...(decision.budget !== undefined ? { budget: decision.budget as unknown as JsonValue } : {})
+    };
+
+    const partialTrace: Trace = buildPartialTrace({
+      childRunId,
+      events: childEvents,
+      startedAtMs: childStartedAt,
+      protocol: decision.protocol,
+      tier: options.tier,
+      modelProviderId: options.model.id,
+      agents: options.agents,
+      intent: decision.intent,
+      temperature: options.temperature,
+      ...(childTimeoutMs !== undefined ? { childTimeoutMs } : {}),
+      ...(options.seed !== undefined ? { seed: options.seed } : {})
+    });
+
+    const errorPayload = errorPayloadFromUnknown(error, failedDecision);
+    const failEvent: SubRunFailedEvent = {
+      type: "sub-run-failed",
+      runId: input.parentRunId,
+      at: new Date().toISOString(),
+      childRunId,
+      parentRunId: input.parentRunId,
+      parentDecisionId: input.parentDecisionId,
+      error: errorPayload,
+      partialTrace
+    };
+    parentEmit(failEvent);
+    input.recordProtocolDecision(failEvent);
+
+    // Re-throw a DogpileError so the parent run terminates with a typed error.
+    if (DogpileError.isInstance(error)) {
+      throw error;
+    }
+    throw new DogpileError({
+      code: "invalid-configuration",
+      message: error instanceof Error ? error.message : String(error),
+      retryable: false,
+      detail: {
+        kind: "delegate-validation",
+        path: "decision",
+        reason: "child-run-failed"
+      }
+    });
+  }
+
+  const completedEvent: RunEvent = {
+    type: "sub-run-completed",
+    runId: input.parentRunId,
+    at: new Date().toISOString(),
+    childRunId,
+    parentRunId: input.parentRunId,
+    parentDecisionId: input.parentDecisionId,
+    subResult
+  };
+  parentEmit(completedEvent);
+  input.recordProtocolDecision(completedEvent);
+
+  // D-18 synthetic transcript entry.
+  const decisionAsJson: JsonObject = {
+    type: "delegate",
+    protocol: decision.protocol,
+    intent: decision.intent,
+    ...(decision.model !== undefined ? { model: decision.model } : {}),
+    ...(decision.budget !== undefined ? { budget: decision.budget as unknown as JsonValue } : {})
+  };
+  const taggedText = renderSubRunResult(childRunId, subResult);
+  input.transcript.push({
+    agentId: `sub-run:${childRunId}`,
+    role: "delegate-result",
+    input: JSON.stringify(decisionAsJson),
+    output: taggedText
+  });
+
+  // Build the next coordinator prompt by appending the D-17 tagged block.
+  const coordinatorAgent = options.agents[0];
+  const baseInput = buildCoordinatorPlanInput(input.options.intent, coordinatorAgent ?? {
+    id: "coordinator",
+    role: "coordinator"
+  });
+  return {
+    nextInput: `${baseInput}\n\n${taggedText}\n\nUsing the sub-run result above, decide the next step (participate or delegate).`
+  };
+}
+
+/**
+ * D-17 prompt-injection helper. Renders a child `RunResult` as the canonical
+ * tagged-result block injected into the parent coordinator's next prompt.
+ *
+ * Format:
+ *   `[sub-run <childRunId>]: <output>`
+ *   `[sub-run <childRunId> stats]: turns=<N> costUsd=<X> durationMs=<Y>`
+ *
+ * The stats line is a soft contract — field names stable, ordering stable.
+ */
+function renderSubRunResult(childRunId: string, subResult: RunResult): string {
+  const turns = subResult.transcript.length;
+  const costUsd = subResult.cost.usd ?? 0;
+  const startedAt = subResult.trace.events[0]?.at;
+  const endedAt = subResult.trace.events.at(-1)?.at;
+  const durationMs =
+    startedAt && endedAt
+      ? Math.max(0, Date.parse(endedAt) - Date.parse(startedAt))
+      : 0;
+  return [
+    `[sub-run ${childRunId}]: ${subResult.output}`,
+    `[sub-run ${childRunId} stats]: turns=${turns} costUsd=${costUsd} durationMs=${durationMs}`
+  ].join("\n");
+}
+
+/**
+ * Build a JSON-serializable {@link Trace} for `sub-run-failed.partialTrace`
+ * from a buffered tee of child emits. Keeps `runProtocol`'s error contract
+ * unchanged — Plan 03 step 8.
+ */
+function buildPartialTrace(input: {
+  readonly childRunId: string;
+  readonly events: readonly RunEvent[];
+  readonly startedAtMs: number;
+  readonly protocol: ProtocolSelection;
+  readonly tier: Tier;
+  readonly modelProviderId: string;
+  readonly agents: readonly AgentSpec[];
+  readonly intent: string;
+  readonly temperature: number;
+  readonly childTimeoutMs?: number;
+  readonly seed?: string | number;
+}): Trace {
+  const protocolName = typeof input.protocol === "string" ? input.protocol : input.protocol.kind;
+  const protocolConfig =
+    typeof input.protocol === "string"
+      ? ({ kind: input.protocol } as unknown as Parameters<typeof createReplayTraceRunInputs>[0]["protocol"])
+      : input.protocol;
+  return {
+    schemaVersion: "1.0",
+    runId: input.childRunId,
+    protocol: protocolName,
+    tier: input.tier,
+    modelProviderId: input.modelProviderId,
+    agentsUsed: input.agents,
+    inputs: createReplayTraceRunInputs({
+      intent: input.intent,
+      protocol: protocolConfig,
+      tier: input.tier,
+      modelProviderId: input.modelProviderId,
+      agents: input.agents,
+      temperature: input.temperature
+    }),
+    budget: createReplayTraceBudget({
+      tier: input.tier,
+      ...(input.childTimeoutMs !== undefined ? { caps: { timeoutMs: input.childTimeoutMs } } : {})
+    }),
+    budgetStateChanges: createReplayTraceBudgetStateChanges(input.events),
+    seed: createReplayTraceSeed(input.seed),
+    protocolDecisions: [],
+    providerCalls: [],
+    finalOutput: {
+      kind: "replay-trace-final-output",
+      output: "",
+      cost: emptyCost(),
+      completedAt: new Date().toISOString(),
+      transcript: createTranscriptLink([])
+    },
+    events: input.events,
+    transcript: []
+  };
+}
+
+function errorPayloadFromUnknown(error: unknown, failedDecision: JsonObject): SubRunFailedEvent["error"] {
+  if (DogpileError.isInstance(error)) {
+    const detail: JsonObject = {
+      ...(error.detail ?? {}),
+      failedDecision
+    };
+    return {
+      code: error.code,
+      message: error.message,
+      ...(error.providerId !== undefined ? { providerId: error.providerId } : {}),
+      detail
+    };
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    code: "invalid-configuration",
+    message,
+    detail: { failedDecision }
   };
 }
 

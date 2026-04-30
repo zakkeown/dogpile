@@ -519,6 +519,16 @@ interface RunProtocolOptions {
   readonly terminate?: EngineOptions["terminate"];
   readonly wrapUpHint?: EngineOptions["wrapUpHint"];
   readonly emit?: (event: RunEvent) => void;
+  /**
+   * Current recursion depth. Top-level runs use 0; the coordinator dispatch
+   * loop increments before invoking {@link runProtocol} for a child run.
+   * Plan 04 will wire `effectiveMaxDepth` validation around this value.
+   */
+  readonly currentDepth?: number;
+  /**
+   * Effective max recursion depth. Plan 04 enforces; Plan 03 plumbs the param.
+   */
+  readonly effectiveMaxDepth?: number;
 }
 
 type NonStreamingProtocolOptions = Omit<RunProtocolOptions, "emit"> & Pick<EngineOptions, "evaluate">;
@@ -653,7 +663,14 @@ function runProtocol(options: RunProtocolOptions): Promise<RunResult> {
         ...(options.signal !== undefined ? { signal: options.signal } : {}),
         ...(options.terminate ? { terminate: options.terminate } : {}),
         ...(options.wrapUpHint ? { wrapUpHint: options.wrapUpHint } : {}),
-        ...(options.emit ? { emit: options.emit } : {})
+        ...(options.emit ? { emit: options.emit } : {}),
+        currentDepth: options.currentDepth ?? 0,
+        effectiveMaxDepth: options.effectiveMaxDepth ?? Infinity,
+        runProtocol: (childInput) =>
+          runProtocol({
+            ...childInput,
+            protocol: normalizeProtocol(childInput.protocol)
+          })
       });
     case "shared":
       return runShared({

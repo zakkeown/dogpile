@@ -412,12 +412,20 @@ export function createReplayTraceProtocolDecision(
         cost: event.cost
       };
     case "sub-run-started":
+      return {
+        ...base,
+        input: event.intent
+      };
     case "sub-run-completed":
+      return {
+        ...base,
+        output: event.subResult.output,
+        cost: event.subResult.cost
+      };
     case "sub-run-failed":
-      throw new Error(
-        `${event.type} replay-decision recording is implemented by Plan 03 (coordinator dispatch); ` +
-          `Plan 02 only adds the event union variants.`
-      );
+      return {
+        ...base
+      };
   }
 }
 
@@ -444,12 +452,11 @@ function defaultProtocolDecision(event: RunEvent): ReplayTraceProtocolDecisionTy
     case "final":
       return "finalize-output";
     case "sub-run-started":
+      return "start-sub-run";
     case "sub-run-completed":
+      return "complete-sub-run";
     case "sub-run-failed":
-      throw new Error(
-        `${event.type} replay-decision mapping is implemented by Plan 03 (coordinator dispatch); ` +
-          `Plan 02 only adds the event union variants.`
-      );
+      return "fail-sub-run";
   }
 }
 

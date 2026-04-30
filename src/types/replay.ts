@@ -110,7 +110,10 @@ export type ReplayTraceProtocolDecisionType =
   | "complete-tool-call"
   | "collect-broadcast-round"
   | "stop-for-budget"
-  | "finalize-output";
+  | "finalize-output"
+  | "start-sub-run"
+  | "complete-sub-run"
+  | "fail-sub-run";
 
 /**
  * Protocol-level decision appended during execution.
