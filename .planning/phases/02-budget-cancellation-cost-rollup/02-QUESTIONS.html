@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Phase 2: Budget, Cancellation, Cost Roll-Up — Questions</title>
+<style>
+  :root { --bg:#fafafa; --card:#fff; --muted:#64748b; --line:#e2e8f0; --green:#22c55e; --green-bg:#f0fdf4; --orange:#f97316; --text:#0f172a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); }
+  header { position: sticky; top: 0; z-index: 10; background: #fff; border-bottom: 1px solid var(--line); padding: 16px 24px; }
+  h1 { margin: 0 0 8px; font-size: 18px; }
+  .stats { display: flex; gap: 16px; align-items: center; font-size: 13px; color: var(--muted); }
+  .progress { flex: 1; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; max-width: 360px; }
+  .progress > div { height: 100%; background: var(--green); width: 0%; transition: width .2s; }
+  .actions { display: flex; gap: 8px; }
+  button { font: inherit; padding: 6px 12px; border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer; }
+  button.primary { background: var(--text); color: #fff; border-color: var(--text); }
+  main { padding: 16px 24px 64px; max-width: 1400px; margin: 0 auto; }
+  section { margin-top: 24px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; cursor: pointer; padding: 8px 0; border-bottom: 1px solid var(--line); user-select: none; }
+  .section-head h2 { margin: 0; font-size: 15px; }
+  .section-head .count { font-size: 12px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; padding-top: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .card.answered { border: 2px solid var(--green); background: var(--green-bg); }
+  .card .id { font: 11px/1 ui-monospace, monospace; color: var(--muted); letter-spacing: .5px; }
+  .card h3 { margin: 0; font-size: 14px; }
+  .card .ctx { font-size: 12px; color: var(--muted); font-style: italic; }
+  .opt { display: flex; gap: 8px; padding: 6px; border-radius: 4px; cursor: pointer; }
+  .opt:hover { background: rgba(0,0,0,.03); }
+  .opt input { margin-top: 3px; }
+  .opt .lbl { font-weight: 600; }
+  .opt .desc { font-size: 12px; color: var(--muted); }
+  textarea { width: 100%; min-height: 48px; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 4px; resize: vertical; }
+  textarea.has-content { border: 2px solid var(--orange); }
+  .save-banner { padding: 8px 12px; background: #fffbeb; border: 1px solid #fbbf24; border-radius: 6px; margin-top: 12px; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Phase 2: Budget, Cancellation, Cost Roll-Up — Discussion Questions</h1>
+  <div class="stats">
+    <span><strong id="stat-answered">0</strong> / <span id="stat-total">20</span> answered</span>
+    <div class="progress"><div id="progress-fill"></div></div>
+    <span><span id="stat-remaining">20</span> remaining · <span id="stat-chatmore">0</span> notes</span>
+    <div class="actions" style="margin-left:auto">
+      <button id="copy-json">Copy JSON</button>
+      <button id="download-json" class="primary">Download JSON</button>
+    </div>
+  </div>
+</header>
+<main id="root"></main>
+
+<script>
+const STATE_PATH = ".planning/phases/02-budget-cancellation-cost-rollup/02-QUESTIONS.json";
+const initialState = {
+  "phase": "02-budget-cancellation-cost-rollup",
+  "generated_at": "2026-04-30T00:00:00Z",
+  "stats": { "total": 20, "answered": 0, "chat_more": 0, "remaining": 20 },
+  "sections": [
+    {
+      "id": "cost-rollup",
+      "title": "Cost & Token Roll-Up (BUDGET-03)",
+      "questions": [
+        {
+          "id": "Q-01",
+          "title": "When does parent absorb child cost?",
+          "context": "Today src/runtime/coordinator.ts:787 dispatchDelegate emits `sub-run-completed` with `subResult` but does NOT update `totalCost` (only worker turns and plan-turn provider responses bump it). BUDGET-03 requires parent.accounting = parent's own provider calls + sum of children, recursive. The roll-up has to land somewhere.",
+          "options": [
+            { "id": "a", "label": "Add at sub-run-completed emit", "description": "`totalCost = addCost(totalCost, subResult.cost)` immediately after a successful child returns, before the next plan turn. Single line change in dispatchDelegate; parent.totalCost is always current; final event already carries the rolled-up number." },
+            { "id": "b", "label": "Defer to a finalization pass", "description": "Walk events at run finalization and sum sub-run-completed.subResult.cost into parent's totalCost. Keeps live totalCost as 'parent-local'; downside: termination policies that read totalCost mid-run see local-only numbers." },
+            { "id": "c", "label": "Don't merge — expose accounting.children[]", "description": "Add a new public field `accounting.children: readonly RunAccounting[]` so callers compose totals themselves. Keeps cost.usd as 'parent provider calls only'. Public-surface addition; conflicts with the BUDGET-03 wording 'parent costUsd equals parent + sum of children'." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-02",
+          "title": "Does a failed sub-run contribute cost?",
+          "context": "On `sub-run-failed`, the child threw — but real provider calls before the throw are real money. Today partialTrace is built but `subResult` is absent (only error + partialTrace). Decision affects whether dispatchDelegate must extract a cost from partialTrace or treat failed children as zero.",
+          "options": [
+            { "id": "a", "label": "Yes — sum partialTrace cost into parent", "description": "Walk partialTrace.events for the last cost-bearing event (or accumulate provider events) and add to parent's totalCost. Most accurate to wallet reality; requires a small extractor in dispatchDelegate." },
+            { "id": "b", "label": "No — failed children contribute zero", "description": "Parent absorbs only successful children; failed children leave totalCost untouched. Simpler; under-reports real spend; surprising for users debugging a cancel/abort scenario." },
+            { "id": "c", "label": "Yes via a dedicated partialCost on the failed event", "description": "Lock `sub-run-failed.partialCost: CostSummary` as a public addition; roll-up reads from there. Public-surface delta; explicit; avoids walking partialTrace.events at runtime and again at replay." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-03",
+          "title": "What does `final.cost` carry?",
+          "context": "src/runtime/defaults.ts:626 lastCostBearingEventCost reads `final.cost` (and agent-turn/broadcast/budget-stop). Replay-time `recomputeAccountingFromTrace` cross-checks parent's `finalOutput.cost` against this last event. If parent totalCost rolls up children, `final.cost` must be the rolled-up number for the existing replay invariant to keep holding.",
+          "options": [
+            { "id": "a", "label": "Rolled-up — parent + children", "description": "Keep current invariant intact; replay stays a one-line check; downstream consumers reading `final.cost` see the wallet-truth." },
+            { "id": "b", "label": "Local-only on `final`, rolled-up on accounting", "description": "Splits semantics: final event = parent's own calls; accounting field = total. Requires a new replay-time reconciliation rule and breaks the existing invariant." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-04",
+          "title": "Replay parity: enforce parent = local + sum(children)?",
+          "context": "src/runtime/defaults.ts:662 recomputeAccountingFromTrace currently computes parent's local accounting AND verifies each child's recorded accounting recursively, but does NOT verify that parent's recorded total equals local + sum(children). With BUDGET-03 landed, this becomes a verifiable invariant.",
+          "options": [
+            { "id": "a", "label": "Enforce — parent total must equal local + sum(children)", "description": "Add a third comparison in recomputeAccountingFromTrace; mismatch throws DogpileError({ code: 'invalid-configuration', detail.reason: 'trace-accounting-mismatch', detail.kind: 'parent-rollup-drift' }). Strongest tamper detection; matches Phase 1 strictness." },
+            { "id": "b", "label": "Soft-warn — log on drift, don't throw", "description": "Misaligned with Phase 1's posture (D-10 chose throw). Inconsistent and confusing." },
+            { "id": "c", "label": "Skip — local + per-child checks are sufficient", "description": "Keep replay verification as-is. Risk: parent could record a tampered total that passes today but breaks BUDGET-03 in production." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-05",
+          "title": "Token roll-up: same path as USD?",
+          "context": "RECOMPUTE_FIELD_ORDER (src/runtime/defaults.ts:553) lists eight numeric fields including cost.inputTokens/outputTokens/totalTokens and usage.* parallels. BUDGET-03 mentions cost AND tokens; tokens should roll up wherever USD does, with the same semantics.",
+          "options": [
+            { "id": "a", "label": "Lock in parallel — tokens roll up identically", "description": "addCost already sums all fields; this is essentially a confirmation. Test: lock with one shared rollup test parameterized over the eight fields." },
+            { "id": "b", "label": "Tokens stay local, only USD rolls up", "description": "Asymmetric and surprising; would break consumers using usage.totalTokens for billing. Not recommended." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-06",
+          "title": "Roll-up location: coordinator-only or engine-level?",
+          "context": "Only `coordinator` can emit delegate decisions today. dispatchDelegate lives in coordinator.ts. But `recomputeAccountingFromTrace` is engine-level (defaults.ts) and walks any trace. The live roll-up could mirror that engine-level shape.",
+          "options": [
+            { "id": "a", "label": "Coordinator-only (in dispatchDelegate)", "description": "Simplest; localizes the change; matches where sub-run dispatch already lives. Other protocols never delegate, so they never need it." },
+            { "id": "b", "label": "Engine-level helper", "description": "Add `accumulateSubRunCost` in defaults.ts; coordinator imports it. Future protocols can reuse if delegate spreads. Trivial extra abstraction." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    },
+    {
+      "id": "cancellation",
+      "title": "Cancellation Propagation (BUDGET-01)",
+      "questions": [
+        {
+          "id": "Q-07",
+          "title": "How does parent abort reach the child?",
+          "context": "src/runtime/coordinator.ts:878 already passes `signal: options.signal` into childOptions verbatim. The child engine (src/runtime/engine.ts:341) creates its own AbortController and wires the parent signal via wireCallerAbortSignal. So 'parent abort → child abort' already works structurally. Question is whether the test surface needs more, or whether we want a child-derived controller for richer telemetry.",
+          "options": [
+            { "id": "a", "label": "Keep current — pass parent signal verbatim", "description": "Child engine already chains its abortController to parent via wireCallerAbortSignal. Add tests in src/tests/cancellation-contract.test.ts that exercise: (1) parent.signal.abort() → all in-flight children throw `aborted`, (2) the abort reason propagates as cause." },
+            { "id": "b", "label": "Derive a child AbortController in dispatchDelegate", "description": "`childController = new AbortController(); options.signal?.addEventListener('abort', () => childController.abort(reason));` Lets parent signal multiple unrelated runs without entanglement. Slight allocation overhead per child; cleaner ownership story." },
+            { "id": "c", "label": "Per-child controller AND keep parent signal", "description": "Best telemetry for Phase 4 streaming, but double-wires the abort path. Defer until Phase 4 needs the per-child handle." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-08",
+          "title": "What error code does an aborted child throw?",
+          "context": "BUDGET-01 says 'child runs surface DogpileError({ code: \"aborted\" })'. Today the child engine creates the abort error via createAbortErrorFromSignal (src/runtime/cancellation.ts:22) which preserves the parent's reason. ERROR-03 (Phase 4 scope) says child timeouts surface as `provider-timeout` while parent timeouts surface as `aborted` with `detail.reason: \"timeout\"`.",
+          "options": [
+            { "id": "a", "label": "Plain `aborted` — defer detail.reason to Phase 4", "description": "Phase 2 only requires the code; ERROR-03's detail.reason: 'timeout' enrichment lands in Phase 4 with the rest of error escalation. Keeps Phase 2 surface minimal." },
+            { "id": "b", "label": "`aborted` + detail.reason: 'parent-aborted' or 'timeout' now", "description": "Lock the detail discriminator now so Phase 4 doesn't have to redo the abort path. Two new detail.reason variants to cover: parent-aborted (signal explicit) and timeout (parent deadline). Slight Phase 4 forward-compat work in Phase 2." },
+            { "id": "c", "label": "Custom code per source — `aborted` vs `parent-aborted`", "description": "Public surface change to error codes. Most expressive; most expensive. Conflicts with BUDGET-01's literal wording." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-09",
+          "title": "Aborted child → sub-run-failed.partialTrace shape",
+          "context": "src/runtime/coordinator.ts:896 buildPartialTrace runs from the locally tee'd childEvents buffer regardless of error type. For aborted children, the buffer may be small (no model calls fired yet) or sizeable (mid-flight abort during a turn). BUDGET-01 wants the abort observable on the parent.",
+          "options": [
+            { "id": "a", "label": "Always emit sub-run-failed with whatever partialTrace exists", "description": "Current code path; keeps the failed event uniform regardless of cause; consumers can sniff `error.code === 'aborted'` for branch logic." },
+            { "id": "b", "label": "Suppress sub-run-failed when parent itself was aborted", "description": "Avoids redundant noise (parent is exiting anyway); but loses observability — replay can't tell which children completed vs which were torn down." },
+            { "id": "c", "label": "Emit sub-run-failed but trim partialTrace to {events: [], finalOutput: …}", "description": "Smaller traces for the abort path; loses provenance (e.g., did the child make any provider calls before tear-down?)." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-10",
+          "title": "Parent aborts after sub-run already completed",
+          "context": "Race: child returns successfully, sub-run-completed pushed to parent events, then parent.signal aborts before the next plan turn fires. Today the abort throws on the next throwIfAborted (line 419/498). The completed event stays on the trace.",
+          "options": [
+            { "id": "a", "label": "No-op — keep completed event, propagate abort on next yield", "description": "Current behavior; replay still works (child completed, parent aborted). No new event types needed." },
+            { "id": "b", "label": "Emit a parent-level `aborted` marker event after the sub-run-completed", "description": "Adds a new event variant; richer observability; public-surface addition. Probably overkill for Phase 2." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    },
+    {
+      "id": "timeout",
+      "title": "Timeout & Deadline Propagation (BUDGET-02)",
+      "questions": [
+        {
+          "id": "Q-11",
+          "title": "What is the 'parent's remaining time'?",
+          "context": "src/runtime/coordinator.ts:800 currently reads `parentTimeoutMs = options.budget?.timeoutMs` — the static cap value. BUDGET-02 wording is 'children inherit the parent's remaining time'. The static cap is wrong if the parent has been running for 8 of its 10 second budget and dispatches a child — current code gives the child the full 10s.",
+          "options": [
+            { "id": "a", "label": "Compute remaining = deadline − now", "description": "dispatchDelegate snapshots `parentDeadlineMs = startedAtMs + budget.timeoutMs` once at parent run start (or reads engine-tracked deadline); child gets `Math.max(0, parentDeadlineMs − Date.now())`. Correct to spec; needs deadline plumbed into dispatchDelegate options." },
+            { "id": "b", "label": "Keep static cap (current behavior)", "description": "Wrong per BUDGET-02 wording but simpler. Children running at the end of parent's window can blow past the parent's deadline before the parent's abortController fires (race-y but bounded by parent timeout firing the abort)." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-12",
+          "title": "Decision-time budget override that exceeds remaining",
+          "context": "src/runtime/coordinator.ts:810 currently THROWS invalid-configuration if `decisionTimeoutMs > remainingMs`. BUDGET-02 says 'per-decision budget overrides are honored but cannot exceed parent's remaining'. Three readings of 'cannot exceed': error / clamp / warn.",
+          "options": [
+            { "id": "a", "label": "Error (current)", "description": "Loud failure; agent can't accidentally over-spend; matches Phase 1's strict posture. Risk: agents that emit a fixed budget never adapt to runtime drift." },
+            { "id": "b", "label": "Silently clamp to remaining", "description": "Charitable to agents; loses signal about agent miscalculation. Diverges from Phase 1's loud-failure design." },
+            { "id": "c", "label": "Clamp + emit warning event", "description": "Best of both: child gets a usable budget; trace records the clamp via a new `subRun.budgetClamped` event variant. Public-surface addition; matches the `subRun.concurrencyClamped` pattern from Phase 3." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-13",
+          "title": "Phase-4 ERROR-03 timeout-vs-aborted distinction in Phase 2",
+          "context": "ERROR-03 (Phase 4 scope per ROADMAP) says child timeouts surface as `provider-timeout`, parent timeouts as `aborted` with `detail.reason: \"timeout\"`. Phase 2 builds the propagation path; Phase 4 builds the surfacing. Question: how much of the ERROR-03 reason-tagging do we lock in Phase 2?",
+          "options": [
+            { "id": "a", "label": "Plumb the reason in Phase 2; lock the test in Phase 4", "description": "src/runtime/engine.ts:383 timeout setTimeout fires `abortController.abort(timeoutError)`; the timeoutError carries `code: 'timeout'`. Already discriminable today. Phase 2 only ensures the propagation works; Phase 4 owns the contract test." },
+            { "id": "b", "label": "Lock both now in Phase 2", "description": "Add detail.reason: 'timeout' on the parent-timeout abort path and add a contract test in src/tests/cancellation-contract.test.ts. Pulls in Phase 4 work; keeps the abort path coherent in one PR." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-14",
+          "title": "Default child timeout when parent has no `timeoutMs`",
+          "context": "src/runtime/coordinator.ts:827 today: if parent has no timeoutMs and decision has no timeoutMs, child has no timeoutMs. Inherits the parent's uncapped posture.",
+          "options": [
+            { "id": "a", "label": "Keep undefined (current)", "description": "Symmetric; Phase 1 D-12 already chose this. No behavior change." },
+            { "id": "b", "label": "Apply an engine-level default ceiling for sub-runs", "description": "E.g., `engine.defaultSubRunTimeoutMs`. Lock against accidental runaway children when parent forgot to set a budget. Public-surface addition." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    },
+    {
+      "id": "termination",
+      "title": "Termination Floors & Composition (BUDGET-04)",
+      "questions": [
+        {
+          "id": "Q-15",
+          "title": "Parent termination evaluates parent-level events only — proof?",
+          "context": "Today src/runtime/coordinator.ts:136 `emit` pushes ONLY events the parent emits to parent's local `events`. The teedEmit in dispatchDelegate (line 848) pushes child events to the EXTERNAL stream callback only, NOT to parent's local events. So parent-level termination naturally sees only parent events. BUDGET-04 wants this locked.",
+          "options": [
+            { "id": "a", "label": "Lock with a contract test in budget-first-stop.test.ts", "description": "Build a recursive scenario where a child emits 50 agent-turn events; assert parent's terminate.budget.maxIterations counts only parent events (sub-run-started/completed count as 1 each). Catches any future leak via teedEmit refactor." },
+            { "id": "b", "label": "Add a parent-events array invariant comment + smaller spy test", "description": "Lighter weight; documents the invariant in code; gives a smaller test." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-16",
+          "title": "minTurns / minRounds floors per-instance",
+          "context": "src/runtime/termination.ts:445 protocolMinTurns reads from the protocol config of the running protocol-instance. Each child engine runs with its own protocol config (passed in childOptions) and its own transcript. Floors should naturally scope per-instance — but BUDGET-04 says lock it.",
+          "options": [
+            { "id": "a", "label": "Test: parent has minTurns=3, child has minTurns=5; assert independence", "description": "Construct a coordinator parent with minTurns=3 and a delegated sequential child with minTurns=5; assert child runs ≥5 turns and parent exits at 3 once child returns. Place in budget-first-stop.test.ts or a new termination-recursive.test.ts." },
+            { "id": "b", "label": "Skip — implementation already gives this for free", "description": "Not running a test risks invisible regression if anyone refactors the protocol config plumbing. Not recommended." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-17",
+          "title": "Do sub-run events count as parent termination iterations?",
+          "context": "`firstOf`/`convergence`/`judge` evaluate against `events` and `transcript`. Phase 1 D-18 added a synthetic transcript entry per completed sub-run. So `transcript.length` includes one entry per sub-run AND one per worker turn. budget.maxIterations reads `iteration` which is `transcript.length` in coordinator (line 431).",
+          "options": [
+            { "id": "a", "label": "Lock current behavior — sub-run counts as 1 iteration", "description": "Each delegate counts as one parent iteration via the synthetic transcript entry. Matches D-18 design. Document with a contract test." },
+            { "id": "b", "label": "Exclude sub-run synthetic entries from iteration count", "description": "Filter transcript by role !== 'delegate-result' for iteration math. Cleaner separation; needs careful audit of every termination call site to swap iteration source." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    },
+    {
+      "id": "test-and-surface",
+      "title": "Tests & Public Surface",
+      "questions": [
+        {
+          "id": "Q-18",
+          "title": "Test file organization for Phase 2",
+          "context": "Existing files: src/tests/cancellation-contract.test.ts, src/tests/budget-first-stop.test.ts, src/runtime/coordinator.test.ts. ROADMAP Phase 2 Key files lists those three plus termination.",
+          "options": [
+            { "id": "a", "label": "Extend existing files", "description": "Add recursive-tree cases to cancellation-contract and budget-first-stop. Keeps the contract surface centralized; one place to find the canonical test for each public guarantee." },
+            { "id": "b", "label": "New file per concern", "description": "termination-recursive.test.ts, cost-rollup.test.ts, deadline-propagation.test.ts. More files, easier to grep, but fragments contract-test discoverability." },
+            { "id": "c", "label": "Hybrid", "description": "Contract guarantees → existing files; deep cases (e.g., 4-level nesting cost roll-up) → coordinator.test.ts as scenario tests." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-19",
+          "title": "Public-surface deltas to lock now",
+          "context": "Phase 1 added: `delegate` decision variant, sub-run-started/completed/failed events, RunResult on subResult, partialTrace on failed, recursive flag on started, maxDepth options. CLAUDE.md mandates updating event-schema.test.ts, result-contract.test.ts, package-exports.test.ts, package.json, CHANGELOG.md together for any public-surface change.",
+          "options": [
+            { "id": "a", "label": "No new public types — pure semantics", "description": "BUDGET-01..04 are all behavioral; no new fields/events needed if Q-02=a (failed cost from partialTrace) and Q-12=a (error on overshoot). Cheapest." },
+            { "id": "b", "label": "Add `subRun.budgetClamped` event (if Q-12=c)", "description": "New RunEvent variant; updates event-schema.test.ts + result-contract.test.ts + CHANGELOG. Keeps clamp visible in trace." },
+            { "id": "c", "label": "Add `partialCost` field on sub-run-failed (if Q-02=c)", "description": "Public surface change to the failed event; updates schema/contract/CHANGELOG; gives explicit cost capture without partialTrace walk." },
+            { "id": "d", "label": "Both — full observability surface", "description": "Both b and c. Largest surface delta; richest replay; biggest CHANGELOG entry." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-20",
+          "title": "Plan granularity",
+          "context": "Phase 1 broke into 5 plans (decision union, event types, dispatch loop, maxDepth, replay). Phase 2 has 4 requirements (BUDGET-01..04) but they touch overlapping files (coordinator.ts, defaults.ts, cancellation.ts, termination.ts).",
+          "options": [
+            { "id": "a", "label": "4 plans, one per requirement", "description": "BUDGET-01 cancellation, BUDGET-02 timeout/deadline, BUDGET-03 cost roll-up, BUDGET-04 termination floors. Clean traceability; some shared churn on coordinator.ts dispatchDelegate across plans." },
+            { "id": "b", "label": "3 plans grouped by surface", "description": "(1) abort + timeout propagation (BUDGET-01+02 share the abort/deadline path), (2) cost roll-up + replay parity (BUDGET-03), (3) termination floors lock (BUDGET-04). Fewer commits, less coordinator.ts churn collision." },
+            { "id": "c", "label": "2 plans — propagation vs accounting", "description": "(1) Propagation: BUDGET-01+02+04, (2) Accounting: BUDGET-03 + replay-parity. Largest commits; risk of executor blowing context on a single plan." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    }
+  ]
+}
+;
+
+let state;
+async function loadState() {
+  // Inline data wins; fallback to fetch only if running from a server.
+  if (initialState && initialState.sections) { state = initialState; return; }
+  try {
+    const r = await fetch(STATE_PATH);
+    state = await r.json();
+  } catch (e) {
+    state = { phase: "02", sections: [], stats: { total: 0, answered: 0, chat_more: 0, remaining: 0 } };
+  }
+}
+
+function recomputeStats() {
+  let total = 0, answered = 0, chat_more = 0;
+  for (const s of state.sections) for (const q of s.questions) {
+    total += 1;
+    if (q.answer) answered += 1;
+    if (q.chat_more && q.chat_more.trim()) chat_more += 1;
+  }
+  state.stats = { total, answered, chat_more, remaining: total - answered };
+  document.getElementById("stat-answered").textContent = answered;
+  document.getElementById("stat-total").textContent = total;
+  document.getElementById("stat-remaining").textContent = total - answered;
+  document.getElementById("stat-chatmore").textContent = chat_more;
+  document.getElementById("progress-fill").style.width = total ? (answered / total * 100) + "%" : "0%";
+}
+
+function renderQuestion(q) {
+  const wrap = document.createElement("div");
+  wrap.className = "card" + (q.answer ? " answered" : "");
+  wrap.dataset.id = q.id;
+
+  const id = document.createElement("div");
+  id.className = "id";
+  id.textContent = q.id;
+  wrap.appendChild(id);
+
+  const h = document.createElement("h3");
+  h.textContent = q.title;
+  wrap.appendChild(h);
+
+  if (q.context) {
+    const c = document.createElement("div");
+    c.className = "ctx";
+    c.textContent = q.context;
+    wrap.appendChild(c);
+  }
+
+  for (const opt of q.options) {
+    const lab = document.createElement("label");
+    lab.className = "opt";
+    const r = document.createElement("input");
+    r.type = "radio";
+    r.name = q.id;
+    r.value = opt.id;
+    if (q.answer === opt.id) r.checked = true;
+    r.addEventListener("change", () => {
+      q.answer = opt.id;
+      q.status = "answered";
+      wrap.classList.add("answered");
+      recomputeStats();
+    });
+    const body = document.createElement("div");
+    const l = document.createElement("div"); l.className = "lbl"; l.textContent = opt.label;
+    const d = document.createElement("div"); d.className = "desc"; d.textContent = opt.description;
+    body.appendChild(l); body.appendChild(d);
+    lab.appendChild(r);
+    lab.appendChild(body);
+    wrap.appendChild(lab);
+  }
+
+  const ta = document.createElement("textarea");
+  ta.placeholder = "Add context, nuance, or clarification…";
+  ta.value = q.chat_more || "";
+  if (ta.value.trim()) ta.classList.add("has-content");
+  ta.addEventListener("input", () => {
+    q.chat_more = ta.value;
+    ta.classList.toggle("has-content", !!ta.value.trim());
+    recomputeStats();
+  });
+  wrap.appendChild(ta);
+
+  return wrap;
+}
+
+function renderSection(s) {
+  const sec = document.createElement("section");
+  const head = document.createElement("div");
+  head.className = "section-head";
+  const h = document.createElement("h2");
+  h.textContent = s.title;
+  const cnt = document.createElement("span");
+  cnt.className = "count";
+  const ansHere = s.questions.filter(q => q.answer).length;
+  cnt.textContent = `${ansHere}/${s.questions.length} answered`;
+  head.appendChild(h);
+  head.appendChild(cnt);
+  sec.appendChild(head);
+
+  const grid = document.createElement("div");
+  grid.className = "grid";
+  for (const q of s.questions) grid.appendChild(renderQuestion(q));
+  sec.appendChild(grid);
+
+  head.addEventListener("click", () => grid.style.display = grid.style.display === "none" ? "" : "none");
+  return sec;
+}
+
+function render() {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+  for (const s of state.sections) root.appendChild(renderSection(s));
+
+  const banner = document.createElement("div");
+  banner.className = "save-banner";
+  banner.innerHTML = `When done: click <strong>Download JSON</strong>, replace <code>${STATE_PATH}</code> with the file, then tell Claude <strong>"refresh"</strong> or <strong>"finalize"</strong>.`;
+  root.appendChild(banner);
+
+  recomputeStats();
+}
+
+function serialize() {
+  recomputeStats();
+  return JSON.stringify(state, null, 2);
+}
+
+document.getElementById("download-json").addEventListener("click", () => {
+  const blob = new Blob([serialize()], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "02-QUESTIONS.json";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById("copy-json").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(serialize());
+  const b = document.getElementById("copy-json");
+  const t = b.textContent;
+  b.textContent = "Copied!";
+  setTimeout(() => b.textContent = t, 1200);
+});
+
+(async () => { await loadState(); render(); })();
+</script>
+</body>
+</html>
