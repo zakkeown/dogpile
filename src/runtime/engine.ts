@@ -8,6 +8,7 @@ import type {
   JsonObject,
   JsonValue,
   ProtocolSelection,
+  RunCallOptions,
   RunEvaluation,
   RunEvent,
   RunResult,
@@ -38,7 +39,9 @@ import { runSequential } from "./sequential.js";
 import { runShared } from "./shared.js";
 import { createAbortErrorFromSignal, createTimeoutError } from "./cancellation.js";
 import { budget as budgetCondition } from "./termination.js";
-import { validateDogpileOptions, validateEngineOptions, validateMissionIntent } from "./validation.js";
+import { validateDogpileOptions, validateEngineOptions, validateMissionIntent, validateRunCallOptions } from "./validation.js";
+
+const DEFAULT_MAX_DEPTH = 4;
 
 const defaultHighLevelProtocol = "sequential";
 const defaultHighLevelTier = "balanced";
@@ -67,10 +70,17 @@ export function createEngine(options: EngineOptions): Engine {
   const temperature = options.temperature ?? tierTemperature(options.tier);
   const agents = orderAgentsForTemperature(options.agents ?? defaultAgents(), temperature, options.seed);
   const terminate = options.terminate ?? (options.budget ? conditionFromBudget(options.budget) : undefined);
+  const engineMaxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
 
   return {
-    run(intent: string): Promise<RunResult> {
+    run(intent: string, runOptions?: RunCallOptions): Promise<RunResult> {
       validateMissionIntent(intent);
+      validateRunCallOptions(runOptions);
+
+      const effectiveMaxDepth = Math.min(
+        engineMaxDepth,
+        runOptions?.maxDepth ?? Number.POSITIVE_INFINITY
+      );
 
       return runNonStreamingProtocol({
         intent,
@@ -85,12 +95,20 @@ export function createEngine(options: EngineOptions): Engine {
         ...(options.signal !== undefined ? { signal: options.signal } : {}),
         ...(terminate ? { terminate } : {}),
         ...(options.wrapUpHint ? { wrapUpHint: options.wrapUpHint } : {}),
-        ...(options.evaluate ? { evaluate: options.evaluate } : {})
+        ...(options.evaluate ? { evaluate: options.evaluate } : {}),
+        currentDepth: 0,
+        effectiveMaxDepth
       });
     },
 
-    stream(intent: string): StreamHandle {
+    stream(intent: string, runOptions?: RunCallOptions): StreamHandle {
       validateMissionIntent(intent);
+      validateRunCallOptions(runOptions);
+
+      const effectiveMaxDepth = Math.min(
+        engineMaxDepth,
+        runOptions?.maxDepth ?? Number.POSITIVE_INFINITY
+      );
 
       const pendingEvents: StreamEvent[] = [];
       const pendingResolvers: Array<(value: IteratorResult<StreamEvent>) => void> = [];
@@ -175,6 +193,8 @@ export function createEngine(options: EngineOptions): Engine {
             ...(options.seed !== undefined ? { seed: options.seed } : {}),
             signal: abortController.signal,
             ...(terminate ? { terminate } : {}),
+            currentDepth: 0,
+            effectiveMaxDepth,
             emit(event: RunEvent): void {
               if (status !== "running") {
                 return;

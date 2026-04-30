@@ -1770,6 +1770,16 @@ export interface DogpileOptions extends BudgetCostTierOptions {
   readonly seed?: string | number;
   /** Optional caller cancellation signal passed to provider-facing model requests. */
   readonly signal?: AbortSignal;
+  /**
+   * Maximum coordinator → sub-run recursion depth.
+   *
+   * Defaults to 4. Per-run values can only LOWER the engine ceiling; raising
+   * is silently capped via
+   * `effectiveMaxDepth = Math.min(engineMaxDepth, runMaxDepth ?? Infinity)`.
+   * Depth overflow throws `DogpileError({ code: "invalid-configuration",
+   * detail: { kind: "delegate-validation", reason: "depth-overflow" } })`.
+   */
+  readonly maxDepth?: number;
 }
 
 /**
@@ -1834,6 +1844,30 @@ export interface EngineOptions {
   readonly seed?: string | number;
   /** Optional caller cancellation signal passed to provider-facing model requests. */
   readonly signal?: AbortSignal;
+  /**
+   * Maximum coordinator → sub-run recursion depth ceiling.
+   *
+   * Defaults to 4. Per-run lowering happens at `engine.run` / `engine.stream`
+   * call sites via {@link RunCallOptions.maxDepth}; per-run can only lower this
+   * ceiling. Depth overflow throws `DogpileError({ code: "invalid-configuration",
+   * detail: { kind: "delegate-validation", reason: "depth-overflow" } })`.
+   */
+  readonly maxDepth?: number;
+}
+
+/**
+ * Per-call overrides accepted by {@link Engine.run} and {@link Engine.stream}.
+ *
+ * @remarks
+ * Only fields that should be controllable per-mission live here. Today the
+ * sole field is `maxDepth`, which can only LOWER the engine's ceiling.
+ */
+export interface RunCallOptions {
+  /**
+   * Per-run maximum recursion depth. Cannot raise the engine's ceiling — the
+   * effective value is `Math.min(engine.maxDepth ?? 4, runOptions.maxDepth ?? Infinity)`.
+   */
+  readonly maxDepth?: number;
 }
 
 /**
@@ -1913,7 +1947,7 @@ export interface StreamSubscription {
  */
 export interface Engine {
   /** Execute a mission to completion and return the final result. */
-  run(intent: string): Promise<RunResult>;
+  run(intent: string, options?: RunCallOptions): Promise<RunResult>;
   /** Stream a mission's events while preserving access to the final result. */
-  stream(intent: string): StreamHandle;
+  stream(intent: string, options?: RunCallOptions): StreamHandle;
 }

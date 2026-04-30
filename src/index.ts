@@ -98,6 +98,7 @@ export type {
   DogpileOptions,
   Engine,
   EngineOptions,
+  RunCallOptions,
   FinalEvent,
   FirstOfTerminationCondition,
   FirstOfTerminationConditions,

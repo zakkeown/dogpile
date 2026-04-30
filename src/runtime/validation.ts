@@ -69,10 +69,22 @@ export function validateDogpileOptions(options: DogpileOptions): void {
   validateOptionalFunction(options.evaluate, "evaluate");
   validateOptionalSeed(options.seed, "seed");
   validateOptionalAbortSignal(options.signal, "signal");
+  validateOptionalNonNegativeInteger(options.maxDepth, "maxDepth");
 }
 
 export function validateMissionIntent(intent: unknown, path = "intent"): void {
   validateNonEmptyString(intent, path, "intent is required.");
+}
+
+/**
+ * Validate per-call run/stream options (`Engine.run(intent, options)` / `Engine.stream(...)`).
+ */
+export function validateRunCallOptions(options: unknown, path = "options"): void {
+  if (options === undefined) {
+    return;
+  }
+  const record = requireRecord(options, path);
+  validateOptionalNonNegativeInteger(record.maxDepth, `${path}.maxDepth`);
 }
 
 /**
@@ -92,6 +104,7 @@ export function validateEngineOptions(options: EngineOptions): void {
   validateOptionalFunction(options.evaluate, "evaluate");
   validateOptionalSeed(options.seed, "seed");
   validateOptionalAbortSignal(options.signal, "signal");
+  validateOptionalNonNegativeInteger(options.maxDepth, "maxDepth");
 }
 
 /**
