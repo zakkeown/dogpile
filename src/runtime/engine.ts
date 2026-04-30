@@ -33,6 +33,7 @@ import {
   defaultAgents,
   normalizeProtocol,
   orderAgentsForTemperature,
+  recomputeAccountingFromTrace,
   tierTemperature
 } from "./defaults.js";
 import { runSequential } from "./sequential.js";
@@ -763,6 +764,11 @@ export function stream(options: DogpileOptions): StreamHandle {
 export function replay(trace: Trace): RunResult {
   const cost = trace.finalOutput.cost;
   const lastEvent = trace.events.at(-1);
+  // D-08 / D-10: rebuild accounting recursively from the saved trace and
+  // verify every embedded sub-run's recorded accounting matches what the
+  // child trace recomputes. Mismatches throw `invalid-configuration` with
+  // `detail.reason: "trace-accounting-mismatch"`. No provider invocation.
+  const accounting = recomputeAccountingFromTrace(trace);
   const baseResult = {
     output: trace.finalOutput.output,
     eventLog: createRunEventLog(trace.runId, trace.protocol, trace.events),
@@ -777,13 +783,7 @@ export function replay(trace: Trace): RunResult {
       agentsUsed: trace.agentsUsed,
       events: trace.events
     }),
-    accounting: createRunAccounting({
-      tier: trace.tier,
-      ...(trace.budget.caps ? { budget: trace.budget.caps } : {}),
-      ...(trace.budget.termination ? { termination: trace.budget.termination } : {}),
-      cost,
-      events: trace.events
-    }),
+    accounting,
     cost
   };
 

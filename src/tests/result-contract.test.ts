@@ -916,6 +916,62 @@ describe("single-call result contract", () => {
     expect(embedded.parentRunId).toBe(parent.trace.runId);
     expect(embedded.childRunId).toBe(child.trace.runId);
   });
+
+  it("replay round-trip preserves parent event sequence verbatim for a parent-trace-with-one-child fixture", async () => {
+    // Build a small parent-with-one-child fixture by running a coordinator
+    // mission scripted to delegate exactly once before participating.
+    const planResponses = [
+      [
+        "delegate:",
+        "```json",
+        JSON.stringify({ protocol: "sequential", intent: "single child for verbatim event-sequence test" }),
+        "```",
+        ""
+      ].join("\n"),
+      [
+        "role_selected: coordinator",
+        "participation: contribute",
+        "rationale: synthesize after sub-run",
+        "contribution:",
+        "synthesized after sub-run"
+      ].join("\n")
+    ];
+    let planIndex = 0;
+    const provider: ConfiguredModelProvider = {
+      id: "result-contract-replay-verbatim",
+      async generate(request: ModelRequest): Promise<ModelResponse> {
+        const phase = String(request.metadata.phase);
+        const text =
+          phase === "plan"
+            ? (planResponses[planIndex++] ?? planResponses[planResponses.length - 1]!)
+            : phase === "worker"
+              ? "worker output"
+              : "final output";
+        return { text, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+      }
+    };
+
+    const result = await run({
+      intent: "Verbatim event sequence after replay.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+
+    // Confirm the fixture really has one sub-run in the parent event stream.
+    expect(result.trace.events.filter((event) => event.type === "sub-run-completed")).toHaveLength(1);
+
+    const replayed = replay(result.trace);
+    expect(replayed.trace.events.map((event) => event.type)).toEqual(
+      result.trace.events.map((event) => event.type)
+    );
+    // Full event-array equality, not just type sequence.
+    expect(replayed.trace.events).toEqual(result.trace.events);
+  });
 });
 
 function sortedKeys(value: object): string[] {
