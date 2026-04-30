@@ -218,7 +218,15 @@ export async function runSequential(options: SequentialRunOptions): Promise<RunR
     }
   }
 
-  const output = [...transcript].reverse().find((entry) => isParticipatingDecision(entry.decision))?.output ?? "";
+  // Preferred: most recent entry with an explicit participating decision.
+  // Fallback: most recent entry that has no parsed decision at all (preserves
+  // pre-discriminated-union behavior where unparsed turns were treated as
+  // participating). Delegate decisions are explicitly non-participating.
+  const reversed = [...transcript].reverse();
+  const output =
+    reversed.find((entry) => isParticipatingDecision(entry.decision))?.output ??
+    reversed.find((entry) => entry.decision === undefined)?.output ??
+    "";
   throwIfAborted(options.signal, options.model.id);
   const final: RunEvent = {
     type: "final",

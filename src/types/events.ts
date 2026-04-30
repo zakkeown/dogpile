@@ -1,4 +1,5 @@
 import type {
+  BudgetCaps,
   BudgetStopReason,
   CostSummary,
   JsonObject,
@@ -9,6 +10,7 @@ import type {
   ModelResponse,
   NormalizedQualityScore,
   Protocol,
+  ProtocolName,
   RunEvaluation,
   RuntimeToolIdentity,
   RuntimeToolPermission,
@@ -211,7 +213,9 @@ export interface ToolResultEvent {
  * metadata so reproduction harnesses can distinguish contribution from
  * voluntary abstention without reparsing raw text.
  */
-export interface AgentDecision {
+export interface ParticipateAgentDecision {
+  /** Discriminant marking this as a participate-style decision. */
+  readonly type: "participate";
   /** Task-specific role selected by the agent for this turn. */
   readonly selectedRole: string;
   /** Whether the agent contributed or voluntarily abstained. */
@@ -221,6 +225,43 @@ export interface AgentDecision {
   /** Agent-provided contribution text, or abstention explanation. */
   readonly contribution: string;
 }
+
+/**
+ * Decision emitted by a coordinator agent that delegates a sub-mission to a
+ * coordination protocol rather than contributing directly. The runtime
+ * dispatches a child run when this decision is returned (Phase 1+; Phase 1 only
+ * accepts a single delegate per turn — array-of-delegates is reserved for
+ * Phase 3).
+ */
+export interface DelegateAgentDecision {
+  /** Discriminant marking this as a delegate-style decision. */
+  readonly type: "delegate";
+  /** Coordination protocol the child sub-run will execute. */
+  readonly protocol: ProtocolName;
+  /** Mission text passed to the child sub-run. */
+  readonly intent: string;
+  /**
+   * Optional model provider id assertion. When set, the runtime requires the
+   * value to match the parent's `ConfiguredModelProvider.id` (D-11) — child
+   * runs always inherit the parent provider instance verbatim.
+   */
+  readonly model?: string;
+  /** Optional per-decision budget caps applied to the child run. */
+  readonly budget?: BudgetCaps;
+}
+
+/**
+ * Discriminated union of structured agent decisions parsed from model output.
+ *
+ * - `participate`: paper-style turn contribution; carries the four labeled
+ *   fields (`selectedRole`, `participation`, `rationale`, `contribution`).
+ * - `delegate`: coordinator-only delegation to a child sub-run. The runtime
+ *   dispatches a sub-mission when this branch is returned.
+ *
+ * Consumers MUST narrow on `decision.type === "participate"` before reading
+ * paper-style fields.
+ */
+export type AgentDecision = ParticipateAgentDecision | DelegateAgentDecision;
 
 /**
  * Agent participation state for a paper-style turn decision.

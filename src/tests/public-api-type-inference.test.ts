@@ -35,6 +35,7 @@ import type {
   ModelResponse,
   Protocol,
   ProtocolConfig,
+  ProtocolName,
   ProtocolSelection,
   RunEvent,
   RunEventLog,
@@ -278,7 +279,12 @@ type _AgentTurnOutputIsNotAny = ExpectFalse<IsAny<AgentTurnTraceEvent["output"]>
 type _AgentTurnOutputIsString = ExpectTrue<IsEqual<AgentTurnTraceEvent["output"], string>>;
 type _AgentTurnDecisionIsExact = ExpectTrue<IsEqual<AgentTurnDecision, AgentDecision>>;
 type _TranscriptDecisionIsExact = ExpectTrue<IsEqual<TranscriptDecision, AgentDecision>>;
-type _AgentDecisionParticipationIsExact = ExpectTrue<IsEqual<AgentDecision["participation"], AgentParticipation>>;
+type _AgentDecisionParticipateBranchParticipationIsExact = ExpectTrue<
+  IsEqual<Extract<AgentDecision, { type: "participate" }>["participation"], AgentParticipation>
+>;
+type _AgentDecisionDelegateBranchProtocolIsExact = ExpectTrue<
+  IsEqual<Extract<AgentDecision, { type: "delegate" }>["protocol"], ProtocolName>
+>;
 type _ErrorStreamEventIsNotAny = ExpectFalse<IsAny<ErrorStreamEvent>>;
 type _ErrorStreamEventMessageIsNotAny = ExpectFalse<IsAny<ErrorStreamEvent["message"]>>;
 type _ErrorStreamEventMessageIsString = ExpectTrue<IsEqual<ErrorStreamEvent["message"], string>>;

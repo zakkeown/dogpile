@@ -1,4 +1,4 @@
-import type { AgentDecision, AgentParticipation } from "../types.js";
+import type { AgentDecision, AgentParticipation, ParticipateAgentDecision } from "../types.js";
 
 export function parseAgentDecision(output: string): AgentDecision | undefined {
   const selectedRole = matchLine(output, /^role_selected:\s*(.+)$/imu);
@@ -10,16 +10,21 @@ export function parseAgentDecision(output: string): AgentDecision | undefined {
     return undefined;
   }
 
-  return {
+  const decision: ParticipateAgentDecision = {
+    type: "participate",
     selectedRole,
     participation,
     rationale,
     contribution
   };
+  return decision;
 }
 
 export function isParticipatingDecision(decision: AgentDecision | undefined): boolean {
-  return decision?.participation !== "abstain";
+  if (decision?.type !== "participate") {
+    return false;
+  }
+  return decision.participation !== "abstain";
 }
 
 function matchLine(output: string, pattern: RegExp): string | undefined {
