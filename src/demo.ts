@@ -88,7 +88,10 @@ export type DemoTraceEventMetadata =
   | DemoAgentTurnEventMetadata
   | DemoBroadcastEventMetadata
   | DemoBudgetStopEventMetadata
-  | DemoFinalEventMetadata;
+  | DemoFinalEventMetadata
+  | DemoSubRunStartedEventMetadata
+  | DemoSubRunCompletedEventMetadata
+  | DemoSubRunFailedEventMetadata;
 
 export interface DemoRoleAssignmentEventMetadata {
   readonly type: "role-assignment";
@@ -179,6 +182,33 @@ export interface DemoFinalEventMetadata {
   readonly totalTokens: number;
   readonly costUsd: number;
   readonly transcriptEntryCount: number;
+}
+
+export interface DemoSubRunStartedEventMetadata {
+  readonly type: "sub-run-started";
+  readonly childRunId: string;
+  readonly parentRunId: string;
+  readonly parentDecisionId: string;
+  readonly protocol: string;
+  readonly intent: string;
+  readonly depth: number;
+  readonly recursive?: boolean;
+}
+
+export interface DemoSubRunCompletedEventMetadata {
+  readonly type: "sub-run-completed";
+  readonly childRunId: string;
+  readonly parentRunId: string;
+  readonly parentDecisionId: string;
+}
+
+export interface DemoSubRunFailedEventMetadata {
+  readonly type: "sub-run-failed";
+  readonly childRunId: string;
+  readonly parentRunId: string;
+  readonly parentDecisionId: string;
+  readonly errorCode: string;
+  readonly errorMessage: string;
 }
 
 export interface DemoTraceEventListItem {
@@ -421,6 +451,12 @@ function traceEventTitle(event: RunEvent): string {
       return `Budget stopped: ${event.reason}`;
     case "final":
       return "Final output";
+    case "sub-run-started":
+      return `Sub-run dispatched: ${event.protocol}`;
+    case "sub-run-completed":
+      return `Sub-run ${event.childRunId} completed`;
+    case "sub-run-failed":
+      return `Sub-run ${event.childRunId} failed: ${event.error.message}`;
   }
 
   return assertNever(event);
@@ -445,6 +481,10 @@ function traceEventVisualSection(event: RunEvent): DemoTraceEventVisualSection {
       return "activity-log";
     case "final":
       return "final-output";
+    case "sub-run-started":
+    case "sub-run-completed":
+    case "sub-run-failed":
+      return "activity-log";
   }
 
   return assertNever(event);
@@ -469,6 +509,10 @@ function traceEventVisualState(event: RunEvent): DemoTraceEventVisualState {
       return "budget-stopped";
     case "final":
       return "run-completed";
+    case "sub-run-started":
+    case "sub-run-completed":
+    case "sub-run-failed":
+      return "turn-completed";
   }
 
   return assertNever(event);
@@ -566,6 +610,33 @@ function traceEventMetadata(event: RunEvent): DemoTraceEventMetadata {
         totalTokens: event.cost.totalTokens,
         costUsd: event.cost.usd,
         transcriptEntryCount: event.transcript.entryCount
+      };
+    case "sub-run-started":
+      return {
+        type: event.type,
+        childRunId: event.childRunId,
+        parentRunId: event.parentRunId,
+        parentDecisionId: event.parentDecisionId,
+        protocol: event.protocol,
+        intent: event.intent,
+        depth: event.depth,
+        ...(event.recursive !== undefined ? { recursive: event.recursive } : {})
+      };
+    case "sub-run-completed":
+      return {
+        type: event.type,
+        childRunId: event.childRunId,
+        parentRunId: event.parentRunId,
+        parentDecisionId: event.parentDecisionId
+      };
+    case "sub-run-failed":
+      return {
+        type: event.type,
+        childRunId: event.childRunId,
+        parentRunId: event.parentRunId,
+        parentDecisionId: event.parentDecisionId,
+        errorCode: event.error.code,
+        errorMessage: event.error.message
       };
   }
 

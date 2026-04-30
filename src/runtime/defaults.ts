@@ -274,6 +274,9 @@ export function createReplayTraceBudgetStateChanges(
       case "model-output-chunk":
       case "tool-call":
       case "tool-result":
+      case "sub-run-started":
+      case "sub-run-completed":
+      case "sub-run-failed":
         return [];
     }
   });
@@ -408,6 +411,13 @@ export function createReplayTraceProtocolDecision(
         output: event.output,
         cost: event.cost
       };
+    case "sub-run-started":
+    case "sub-run-completed":
+    case "sub-run-failed":
+      throw new Error(
+        `${event.type} replay-decision recording is implemented by Plan 03 (coordinator dispatch); ` +
+          `Plan 02 only adds the event union variants.`
+      );
   }
 }
 
@@ -433,6 +443,13 @@ function defaultProtocolDecision(event: RunEvent): ReplayTraceProtocolDecisionTy
       return "stop-for-budget";
     case "final":
       return "finalize-output";
+    case "sub-run-started":
+    case "sub-run-completed":
+    case "sub-run-failed":
+      throw new Error(
+        `${event.type} replay-decision mapping is implemented by Plan 03 (coordinator dispatch); ` +
+          `Plan 02 only adds the event union variants.`
+      );
   }
 }
 

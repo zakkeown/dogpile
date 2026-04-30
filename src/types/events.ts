@@ -12,10 +12,12 @@ import type {
   Protocol,
   ProtocolName,
   RunEvaluation,
+  RunResult,
   RuntimeToolIdentity,
   RuntimeToolPermission,
   RuntimeToolResult,
-  TerminationStopRecord
+  TerminationStopRecord,
+  Trace
 } from "../types.js";
 
 
@@ -460,6 +462,107 @@ export interface FinalEvent {
 }
 
 /**
+ * Event emitted when the coordinator dispatches a delegated sub-run.
+ *
+ * @remarks
+ * Recorded immediately before the child run starts executing. Carries the
+ * child's run id, the parent decision id that triggered the dispatch, and the
+ * resolved protocol/intent/depth. The `recursive` flag marks the diagnostic
+ * case where a coordinator delegates to another coordinator (D-16).
+ *
+ * The event's `runId` is the PARENT run id, matching the existing trace
+ * convention; `parentRunId` duplicates it for explicit cross-reference.
+ */
+export interface SubRunStartedEvent {
+  /** Discriminant for event rendering and exhaustive switches. */
+  readonly type: "sub-run-started";
+  /** Parent run id; matches the surrounding trace runId. */
+  readonly runId: string;
+  /** ISO-8601 event timestamp. */
+  readonly at: string;
+  /** Child run id assigned to the dispatched sub-run. */
+  readonly childRunId: string;
+  /** Parent run id (duplicates `runId` for explicit cross-reference). */
+  readonly parentRunId: string;
+  /** Replay decision id of the parent decision that triggered this sub-run. */
+  readonly parentDecisionId: string;
+  /** Coordination protocol the child run will execute. */
+  readonly protocol: ProtocolName;
+  /** Mission intent passed to the child run. */
+  readonly intent: string;
+  /** Recursion depth of the child run (1 for first-level sub-run). */
+  readonly depth: number;
+  /**
+   * Diagnostic flag set when a coordinator delegates to another coordinator
+   * (parent protocol === "coordinator" and child protocol === "coordinator").
+   */
+  readonly recursive?: boolean;
+}
+
+/**
+ * Event emitted when a delegated sub-run completes successfully.
+ *
+ * @remarks
+ * Carries the full {@link RunResult} as `subResult`, including the embedded
+ * child {@link Trace}. Replay walks the parent event sequence and recurses on
+ * `subResult.trace` to rehydrate sub-run accounting without re-invoking the
+ * provider (D-08).
+ */
+export interface SubRunCompletedEvent {
+  /** Discriminant for event rendering and exhaustive switches. */
+  readonly type: "sub-run-completed";
+  /** Parent run id; matches the surrounding trace runId. */
+  readonly runId: string;
+  /** ISO-8601 event timestamp. */
+  readonly at: string;
+  /** Child run id that produced this result. */
+  readonly childRunId: string;
+  /** Parent run id (duplicates `runId` for explicit cross-reference). */
+  readonly parentRunId: string;
+  /** Replay decision id of the parent decision that triggered the sub-run. */
+  readonly parentDecisionId: string;
+  /** Full child {@link RunResult}, including the embedded child {@link Trace}. */
+  readonly subResult: RunResult;
+}
+
+/**
+ * Event emitted when a delegated sub-run fails before completion.
+ *
+ * @remarks
+ * Captures a structured `error` plus the partial {@link Trace} accumulated
+ * before failure. The same `Trace` shape used by completed runs is preserved
+ * — consumers can replay or inspect the partial child events without bespoke
+ * deserialization logic.
+ */
+export interface SubRunFailedEvent {
+  /** Discriminant for event rendering and exhaustive switches. */
+  readonly type: "sub-run-failed";
+  /** Parent run id; matches the surrounding trace runId. */
+  readonly runId: string;
+  /** ISO-8601 event timestamp. */
+  readonly at: string;
+  /** Child run id that failed. */
+  readonly childRunId: string;
+  /** Parent run id (duplicates `runId` for explicit cross-reference). */
+  readonly parentRunId: string;
+  /** Replay decision id of the parent decision that triggered the sub-run. */
+  readonly parentDecisionId: string;
+  /** Structured failure description. */
+  readonly error: {
+    /** Stable error code (matches DogpileError code shape). */
+    readonly code: string;
+    /** Human-readable failure description. */
+    readonly message: string;
+    /** Provider id when the failure originated in a model call. */
+    readonly providerId?: string;
+    /** Optional structured detail (e.g., the failed delegate decision payload). */
+    readonly detail?: JsonObject;
+  };
+  /** Partial child {@link Trace} accumulated up to the failure point. */
+  readonly partialTrace: Trace;
+}
+
+/**
  * Successful coordination event emitted by Dogpile and persisted in traces.
  *
  * @remarks
@@ -475,6 +578,9 @@ export interface FinalEvent {
  * - `tool-result`: one runtime tool invocation completed.
  * - `agent-turn`: one agent completed a prompt/response turn.
  * - `broadcast`: a broadcast round gathered independent contributions.
+ * - `sub-run-started`: a delegated sub-run was dispatched.
+ * - `sub-run-completed`: a delegated sub-run completed and embedded its full result.
+ * - `sub-run-failed`: a delegated sub-run failed before completion.
  * - `budget-stop`: a configured budget cap halted further model turns.
  * - `final`: the run completed and produced the final output.
  *
@@ -505,6 +611,9 @@ export type RunEvent =
   | ToolResultEvent
   | TurnEvent
   | BroadcastEvent
+  | SubRunStartedEvent
+  | SubRunCompletedEvent
+  | SubRunFailedEvent
   | BudgetStopEvent
   | FinalEvent;
 
@@ -524,10 +633,16 @@ export type ToolActivityEvent = ToolCallEvent | ToolResultEvent;
  * Lifecycle event yielded by `stream()`.
  *
  * These events describe workflow coordination state rather than model text.
- * Role assignment establishes the participant roster, while `budget-stop`
- * records a lifecycle halt before the terminal completion event.
+ * Role assignment establishes the participant roster, `budget-stop` records a
+ * lifecycle halt before the terminal completion event, and the `sub-run-*`
+ * variants surface delegated child-run dispatch boundaries.
  */
-export type StreamLifecycleEvent = RoleAssignmentEvent | BudgetStopEvent;
+export type StreamLifecycleEvent =
+  | RoleAssignmentEvent
+  | BudgetStopEvent
+  | SubRunStartedEvent
+  | SubRunCompletedEvent
+  | SubRunFailedEvent;
 
 /**
  * Output event yielded by `stream()`.

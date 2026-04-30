@@ -105,6 +105,9 @@ function recordEvent(event: RunEvent): string {
     case "model-output-chunk":
     case "budget-stop":
     case "final":
+    case "sub-run-started":
+    case "sub-run-completed":
+    case "sub-run-failed":
       return event.type;
   }
 }
