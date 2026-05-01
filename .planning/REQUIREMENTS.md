@@ -44,7 +44,7 @@ REQ-ID format: `[CATEGORY]-[NN]`. Numbering restarts per milestone (no prior REQ
 
 - [x] **STREAM-01** — `Dogpile.stream(parent)` emits child events wrapped with `parentRunIds` ancestry and the child's `runId`, so consumers can demultiplex concurrent children.
 - [x] **STREAM-02** — Within a single child, event order is preserved; cross-child order is unspecified.
-- [ ] **STREAM-03** — `StreamHandle.cancel()` on the parent cancels all in-flight child streams.
+- [x] **STREAM-03** — `StreamHandle.cancel()` on the parent cancels all in-flight child streams.
 
 ### ERROR — child failure escalation
 
@@ -99,7 +99,7 @@ REQ-ID format: `[CATEGORY]-[NN]`. Numbering restarts per milestone (no prior REQ
 | CONCURRENCY-02 | Phase 3 | Complete |
 | STREAM-01 | Phase 4 | Complete |
 | STREAM-02 | Phase 4 | Complete |
-| STREAM-03 | Phase 4 | Pending |
+| STREAM-03 | Phase 4 | Complete |
 | ERROR-01 | Phase 4 | Pending |
 | ERROR-02 | Phase 4 | Pending |
 | ERROR-03 | Phase 4 | Pending |

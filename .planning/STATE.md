@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.4.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-05-01T14:05:02.071Z"
-last_activity: 2026-05-01 -- Phase 05 planning complete
+status: Phase 4 in progress; Plan 04-02 cancel propagation complete
+last_updated: "2026-05-01T14:11:47Z"
+last_activity: 2026-05-01 -- Phase 04 Plan 04-02 complete
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 22
-  completed_plans: 13
-  percent: 59
+  completed_plans: 14
+  percent: 64
 ---
 
 # State
@@ -24,17 +24,17 @@ progress:
 ## Current Position
 
 Phase: 04
-Plan: 02
-Status: Ready to execute
-Last activity: 2026-05-01 -- Phase 05 planning complete
+Plan: 03
+Status: Plan 04-02 complete; ready for coordinator failure context
+Last activity: 2026-05-01 -- Phase 04 Plan 04-02 complete
 
 ## Performance Metrics
 
 | Metric | Value |
 |--------|-------|
 | Phases complete | 3 / 5 |
-| Requirements complete | 15 / 27 |
-| Plans complete | 13 / 16 |
+| Requirements complete | 16 / 27 |
+| Plans complete | 14 / 22 |
 
 ## Accumulated Context
 
@@ -57,10 +57,12 @@ Last activity: 2026-05-01 -- Phase 05 planning complete
 - **Phase 4 Plan 04-01 — Stream ancestry chain.** `parentRunIds?: readonly string[]` is the canonical stream ancestry shape on `StreamLifecycleEvent | StreamOutputEvent`; no flat `parentRunId?:` was added.
 - **Phase 4 Plan 04-01 — Live-only child bubbling.** Child events are wrapped with root-first ancestry only for live streams; parent `RunResult.events` and embedded child `subResult.trace.events` remain chain-free.
 - **Phase 4 Plan 04-01 — Replay stream mirror.** `replayStream()` expands embedded `subResult.trace` events and reconstructs `parentRunIds` at replay emit time.
+- **Phase 4 Plan 04-02 — Stream cancel drain.** `StreamHandle.cancel()` now drains active coordinator `DispatchedChild` records before terminal error: started children get synthetic `sub-run-failed` with `detail.reason: "parent-aborted"`, queued children keep `sibling-failed`, and closed children suppress late live forwarding.
+- **Phase 4 Plan 04-02 — Aborted lifecycle event.** `AbortedEvent` joins `StreamLifecycleEvent` with `reason: "parent-aborted" | "timeout"` and is emitted before terminal stream `error` events on abort paths.
 
 ### Todos
 
-- Execute Phase 4 Plan 04-02: cancel propagation.
+- Execute Phase 4 Plan 04-03: coordinator failure context.
 
 ### Blockers
 
@@ -68,8 +70,8 @@ Last activity: 2026-05-01 -- Phase 05 planning complete
 
 ## Session Continuity
 
-**Next action:** Execute 04-02 cancel propagation.
+**Next action:** Execute 04-03 coordinator failure context.
 
 ---
 
-*Last updated: 2026-05-01 — Phase 4 Plan 04-01 complete; 15/27 requirements shipped; verify green.*
+*Last updated: 2026-05-01 — Phase 4 Plan 04-02 complete; 16/27 requirements shipped; verify green.*
