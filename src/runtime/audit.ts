@@ -49,10 +49,10 @@ export function createAuditRecord(trace: Trace): AuditRecord {
   const finalEvent = trace.events.find((event): event is FinalEvent => event.type === "final");
   const budgetStopEvent = trace.events.find((event): event is BudgetStopEvent => event.type === "budget-stop");
 
-  const outcome: AuditOutcome = finalEvent
-    ? { status: "completed" }
-    : budgetStopEvent
-      ? { status: "budget-stopped", terminationCode: budgetStopEvent.reason }
+  const outcome: AuditOutcome = budgetStopEvent
+    ? { status: "budget-stopped", terminationCode: budgetStopEvent.reason }
+    : finalEvent
+      ? { status: "completed" }
       : { status: "aborted" };
 
   const lastTurnCost = [...trace.events]
@@ -84,8 +84,7 @@ export function createAuditRecord(trace: Trace): AuditRecord {
     .filter((event): event is SubRunCompletedEvent => event.type === "sub-run-completed")
     .map((event) => event.childRunId);
 
-  const firstEvent = trace.events[0] as { readonly at?: string } | undefined;
-  const startedAt = firstEvent?.at ?? "";
+  const startedAt = eventStartedAt(trace.events[0]);
 
   return {
     auditSchemaVersion: "1",
@@ -103,4 +102,20 @@ export function createAuditRecord(trace: Trace): AuditRecord {
     agents,
     ...(childRunIds.length > 0 ? { childRunIds } : {})
   };
+}
+
+function eventStartedAt(event: Trace["events"][number] | undefined): string {
+  if (event === undefined) {
+    return "";
+  }
+
+  if ("at" in event) {
+    return event.at;
+  }
+
+  if ("startedAt" in event) {
+    return event.startedAt;
+  }
+
+  return "";
 }

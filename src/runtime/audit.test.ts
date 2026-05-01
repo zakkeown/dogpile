@@ -36,6 +36,12 @@ describe("createAuditRecord", () => {
     expect(result.startedAt).toBe("2026-05-01T00:00:02.000Z");
   });
 
+  it("derives startedAt from model activity events that use startedAt instead of at", () => {
+    const result = createAuditRecord(traceWith([modelRequestEvent("2026-05-01T00:00:03.000Z")]));
+
+    expect(result.startedAt).toBe("2026-05-01T00:00:03.000Z");
+  });
+
   it("derives completedAt from trace.finalOutput.completedAt", () => {
     const result = createAuditRecord(traceWith([], { completedAt: "2026-05-01T00:00:05.000Z" }));
 
@@ -52,6 +58,12 @@ describe("createAuditRecord", () => {
     const result = createAuditRecord(traceWith([budgetStopEvent("cost")]));
 
     expect(result.outcome).toEqual({ status: "budget-stopped", terminationCode: "cost" });
+  });
+
+  it("keeps budget-stopped outcome when a budget stop is followed by a final event", () => {
+    const result = createAuditRecord(traceWith([budgetStopEvent("iterations"), finalEvent(0, 0, 0)]));
+
+    expect(result.outcome).toEqual({ status: "budget-stopped", terminationCode: "iterations" });
   });
 
   it("sets outcome.status to aborted when no terminal event exists", () => {
@@ -188,6 +200,20 @@ function budgetStopEvent(reason: "cost" | "tokens" | "iterations" | "timeout"): 
     reason,
     cost: costSummary(0.001)
   } as unknown as BudgetStopEvent;
+}
+
+function modelRequestEvent(startedAt: string): RunEvent {
+  return {
+    type: "model-request",
+    runId,
+    startedAt,
+    callId: "call-audit-test",
+    providerId: "test-provider",
+    modelId: "test-model",
+    agentId: "agent-1",
+    role: "writer",
+    request: { messages: [] }
+  } as unknown as RunEvent;
 }
 
 function subRunCompletedEvent(childRunId: string): SubRunCompletedEvent {
