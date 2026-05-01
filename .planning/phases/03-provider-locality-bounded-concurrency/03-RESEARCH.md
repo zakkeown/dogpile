@@ -556,22 +556,25 @@ const expectedEventTypes = [
 
 *All remaining claims tagged [VERIFIED] above were confirmed against actual source files in this session.*
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **BLOCKS Plan 03-02: `parentDecisionArrayIndex` field vs. composite `parentDecisionId` string**
    - What we know: D-10 requires stable per-delegate identity; current `String(events.length - 1)` at coordinator.ts:255 produces the same id for all N delegates from one fan-out turn. Test fixtures use opaque strings (`"decision-1"` etc.), NOT the runtime `String(events.length - 1)` format [VERIFIED].
    - What's unclear: Whether the public event surface should gain `parentDecisionArrayIndex: number` (additive, new field on sub-run-* events) OR change `parentDecisionId` to composite format (smaller surface, but changes an existing field).
    - Recommendation: **Additive `parentDecisionArrayIndex: number` field is the safer default.** It is strictly non-breaking (new optional field), unambiguous, and requires updating D-14's public-surface inventory (+1 field on sub-run-* events). Composite string is viable but changes an existing field's format — a subtler public-API change. Planner must confirm before Plan 03-02 Wave 1 starts.
+   - **RESOLVED:** Additive `parentDecisionArrayIndex: number` chosen and locked in Plan 03-02 (see 03-02 must_haves.truths first entry). Existing `parentDecisionId` format `String(events.length - 1)` preserved unchanged; new field added to `sub-run-queued`, `sub-run-started`, `sub-run-completed`, `sub-run-failed`. Single-delegate turns use `parentDecisionArrayIndex: 0`.
 
 2. **`ReplayTraceProtocolDecisionType` union literal updates**
    - What we know: `defaultProtocolDecision` at defaults.ts:468 returns `ReplayTraceProtocolDecisionType`; two new event types need mappings
    - What's unclear: Whether the type is declared as an explicit union (requiring update) or `string`
    - Recommendation: Planner verifies in `src/types/` or `defaults.ts` import; add new literals `"queue-sub-run"` and `"mark-sub-run-concurrency-clamped"` if needed.
+   - **RESOLVED:** VERIFIED explicit union at `src/types/replay.ts:103-118` (15 string literals, last is `"mark-sub-run-budget-clamped"`). Both new literals MUST be added: `"queue-sub-run"` lands in Plan 03-02 (paired with `sub-run-queued`); `"mark-sub-run-concurrency-clamped"` lands in Plan 03-03 (paired with `sub-run-concurrency-clamped`). Both are recorded in the v0.4.0 CHANGELOG entry.
 
 3. **`dispatchInput` reshape after fan-out completion**
    - What we know: D-10 says "all N results feed into the NEXT plan-turn's prompt context together"; current loop rebuilds `dispatchInput` from a single `dispatchResult`
    - What's unclear: How N parallel `DispatchDelegateResult` objects are merged into the next plan-turn input string
    - Recommendation: Planner defines a `mergeDispatchResults(results: DispatchDelegateResult[]): string` helper. Each result's `nextInput` is appended to the shared context in completion order (D-10), separated by a structured block delimiter.
+   - **RESOLVED:** `mergeDispatchResults(outcomes)` private helper specified in Plan 03-02 Task 2 step 2(h). Per-child `nextInput` blocks are concatenated in COMPLETION (wall-clock) order with the delimiter pattern matching the single-delegate path; sibling-failed synthetic outcomes contribute a brief 'Delegate N skipped (sibling failed)' block so the coordinator agent sees the gap. Locked per D-10.
 
 ## Environment Availability
 

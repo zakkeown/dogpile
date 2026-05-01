@@ -65,7 +65,10 @@ requirements_total: 27
   3. When a coordinator turn emits N `delegate` decisions, at most `maxConcurrentChildren` (default 4) execute concurrently; the rest queue and start as slots free up.
   4. When any provider in the active tree declares `locality: "local"`, effective concurrency clamps to 1 regardless of caller config and emits a `subRun.concurrencyClamped` event with `reason: "local-provider-detected"`.
 **Key files**: `src/types.ts`, `src/providers/openai-compatible.ts`, `src/runtime/validation.ts`, `src/runtime/coordinator.ts`, `src/runtime/defaults.ts`, `src/providers/openai-compatible.test.ts`, `src/runtime/coordinator.test.ts`, `src/tests/event-schema.test.ts`, `src/tests/config-validation.test.ts`
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 03-01-PLAN.md — Provider Locality (PROVIDER-01..03): metadata.locality field + classifyHostLocality + dual validation + asymmetric override
+- [ ] 03-02-PLAN.md — Bounded Dispatch + Array-Parser Unlock (CONCURRENCY-01): semaphore, fan-out, sub-run-queued event, sibling-failed drain, completion-order transcript
+- [ ] 03-03-PLAN.md — Local-Provider Clamping + Event (CONCURRENCY-02): per-dispatch locality walk, lazy single-emit subRun.concurrencyClamped, CHANGELOG v0.4.0 wrap-up
 
 ### Phase 4: Streaming & Child Error Escalation
 **Goal**: Live consumers see child events demultiplexable by `runId`, parent cancel reaches every child stream, and child failures surface as first-class context to the coordinator agent (or escalate unwrapped if unhandled).
@@ -98,7 +101,7 @@ requirements_total: 27
 |-------|----------------|--------|-----------|
 | 1. Delegate Decision & Sub-Run Traces | 0/5 | Planned | - |
 | 2. Budget, Cancellation, Cost Roll-Up | 0/4 | Planned | - |
-| 3. Provider Locality & Bounded Concurrency | 0/0 | Not started | - |
+| 3. Provider Locality & Bounded Concurrency | 0/3 | Planned | - |
 | 4. Streaming & Child Error Escalation | 0/0 | Not started | - |
 | 5. Documentation & Changelog | 0/0 | Not started | - |
 
