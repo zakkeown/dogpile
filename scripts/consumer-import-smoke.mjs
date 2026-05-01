@@ -103,6 +103,7 @@ const publicSubpathRuntimeExports = {
   browser: ["Dogpile", "createEngine", "createOpenAICompatibleProvider", "run", "stream"],
   types: ["DogpileError"],
   "providers/openai-compatible": ["createOpenAICompatibleProvider"],
+  "runtime/audit": ["createAuditRecord"],
   "runtime/broadcast": ["runBroadcast"],
   "runtime/coordinator": ["runCoordinator"],
   "runtime/defaults": ["normalizeProtocol", "defaultAgents", "tierTemperature", "createRunUsage"],
@@ -724,6 +725,7 @@ import {
   type ProtocolConfig as TypesProtocolConfig
 } from ${JSON.stringify(`${packageName}/types`)};
 import { createOpenAICompatibleProvider as createOpenAICompatibleProviderFromSubpath } from ${JSON.stringify(`${packageName}/providers/openai-compatible`)};
+import { createAuditRecord, type AuditRecord } from ${JSON.stringify(`${packageName}/runtime/audit`)};
 import { runBroadcast } from ${JSON.stringify(`${packageName}/runtime/broadcast`)};
 import { runCoordinator } from ${JSON.stringify(`${packageName}/runtime/coordinator`)};
 import {
@@ -910,6 +912,7 @@ export async function consumerTypeResolutionSmoke(): Promise<Trace> {
   const roundTripFromSubpath = replayFromSubpath(result.trace);
   const roundTripStream = replayStream(result.trace);
   const roundTripStreamFromSubpath = replayStreamFromSubpath(result.trace);
+  const auditRecord: AuditRecord = createAuditRecord(result.trace);
 
   if (
     !(DogpileError === TypesDogpileError) ||
@@ -943,6 +946,7 @@ export async function consumerTypeResolutionSmoke(): Promise<Trace> {
     }).type !== "continue" ||
     roundTrip.output !== result.output ||
     roundTripFromSubpath.output !== result.output ||
+    auditRecord.auditSchemaVersion !== "1" ||
     roundTripStream.status !== "completed" ||
     roundTripStreamFromSubpath.status !== "completed"
   ) {

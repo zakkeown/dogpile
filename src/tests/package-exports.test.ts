@@ -14,6 +14,7 @@ import {
   run as browserRun
 } from "@dogpile/sdk/browser";
 import { createOpenAICompatibleProvider as createOpenAICompatibleProviderSubpath } from "@dogpile/sdk/providers/openai-compatible";
+import { createAuditRecord, type AuditRecord } from "@dogpile/sdk/runtime/audit";
 import { createEngine } from "@dogpile/sdk/runtime/engine";
 import {
   DEFAULT_HEALTH_THRESHOLDS,
@@ -1524,8 +1525,25 @@ describe("package exports", () => {
     };
     const rootHealthSummary: RootRunHealthSummary = healthSummary;
     const queriedEvents = queryEvents([], eventQueryFilter);
+    const auditRecord = createAuditRecord({
+      runId: "package-export-audit",
+      protocol: "sequential",
+      tier: "balanced",
+      modelProviderId: "package-export-provider",
+      inputs: { intent: "package export audit smoke" },
+      events: [],
+      finalOutput: {
+        kind: "replay-trace-final-output",
+        output: "",
+        cost: { usd: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        completedAt: "2026-05-01T00:00:00.000Z",
+        transcript: { kind: "trace-transcript", entryCount: 0, lastEntryIndex: null }
+      }
+    } as unknown as Parameters<typeof createAuditRecord>[0]);
+    const typedAuditRecord: AuditRecord = auditRecord;
 
     expect(typeof createEngine).toBe("function");
+    expect(typeof createAuditRecord).toBe("function");
     expect(typeof computeHealth).toBe("function");
     expect(typeof queryEvents).toBe("function");
     expect(typeof createOpenAICompatibleProvider).toBe("function");
@@ -1541,5 +1559,6 @@ describe("package exports", () => {
     expect(queriedEvents).toEqual([]);
     expect(healthThresholds).toEqual({});
     expect(rootHealthSummary.anomalies[0]?.code).toBe("empty-contribution");
+    expect(typedAuditRecord.auditSchemaVersion).toBe("1");
   });
 });
