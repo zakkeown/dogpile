@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0] — 2026-05-01
+
+v0.5.0 Observability and Auditability starts with provenance annotations: model provider calls now produce real request/response events, replay can synthesize those events from provider-call anchors, and callers get a small runtime helper for normalized provenance fields.
+
+### Breaking
+
+- **`ModelRequestEvent` shape changed.** The `at` field is removed. The event now carries `startedAt: string` (ISO-8601 timestamp immediately before the provider call) and `modelId: string` (resolved model identifier). Update any code that reads `event.at` on a `ModelRequestEvent`.
+- **`ModelResponseEvent` shape changed.** The `at` field is removed. The event now carries `startedAt: string`, `completedAt: string` (ISO-8601 timestamp after the provider call), and `modelId: string`. Callers can compute call duration from a single event. Update any code that reads `event.at` on a `ModelResponseEvent`.
+- **`model-request` and `model-response` events are now emitted.** These event types were previously typed but never produced at runtime. They are now emitted on every provider call across all four protocols (`sequential`, `broadcast`, `coordinator`, `shared`). Callers with exhaustive switches over `RunEvent["type"]` that lack a `default` branch may encounter unhandled cases — add `case "model-request":` and `case "model-response":` branches or a fallback `default`.
+
+### Added — Provenance annotations (Phase 6)
+
+- **`ConfiguredModelProvider.modelId?` optional field.** Provider adapters can now declare the specific model identifier, such as `"gpt-4o"`. When absent, the SDK uses `provider.id` as the fallback. `createOpenAICompatibleProvider` and the internal Vercel AI provider populate this field automatically from the configured model.
+- **`ReplayTraceProviderCall.modelId` required field.** The model identifier is now recorded in every provider call entry in `trace.providerCalls`. This is a shape change on the replay type — if you have hand-crafted `ReplayTraceProviderCall` objects, such as in tests, add the `modelId` field.
+- **New subpath: `@dogpile/sdk/runtime/provenance`.** Exports `getProvenance(event)`, `ProvenanceRecord`, and `PartialProvenanceRecord`. `getProvenance()` extracts normalized provenance fields from any `ModelRequestEvent` or `ModelResponseEvent`; the overloaded signature returns `ProvenanceRecord` with `completedAt` for response events and `PartialProvenanceRecord` without `completedAt` for request events.
+
+### Replay
+
+- **`replay()` synthesizes `model-request` / `model-response` events from `trace.providerCalls`.** The augmented event log returned by `replay()` includes provenance events derived from the canonical `providerCalls` anchor. This ensures provenance fields in replayed results are identical to those in live runs (PROV-02). Older traces without these events in `trace.events` gain them on replay.
+
 ## [0.4.0] — 2026-05-01
 
 Recursive coordination — coordinators can now dispatch whole sub-missions via a `delegate` decision, with embedded child traces, propagated budgets/aborts/costs, bounded concurrency with locality clamping, live child-event bubbling on streams, and structured child-failure escalation. See [`docs/recursive-coordination.md`](docs/recursive-coordination.md) for the full surface and a worked example.
