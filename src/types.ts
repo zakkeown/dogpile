@@ -1563,6 +1563,17 @@ export interface Trace {
   readonly providerCalls: readonly ReplayTraceProviderCall[];
   /** Final output artifact for replay consumers. */
   readonly finalOutput: ReplayTraceFinalOutput;
+  /** Internal hand-off for fail-fast coordinator child failure handling. */
+  readonly triggeringFailureForAbortMode?: {
+    readonly childRunId: string;
+    readonly intent: string;
+    readonly error: {
+      readonly code: string;
+      readonly message: string;
+      readonly detail?: { readonly reason?: string };
+    };
+    readonly partialCost: { readonly usd: number };
+  };
   /**
    * Ordered coordination and lifecycle events.
    *
@@ -1817,7 +1828,18 @@ export interface DogpileOptions extends BudgetCostTierOptions {
    * Default: `undefined` (preserves the "no sub-run timeout" posture).
    */
   readonly defaultSubRunTimeoutMs?: number;
+  /**
+   * Controls how coordinator runs react after a real delegated child failure.
+   *
+   * Defaults to `"continue"`, which re-issues the coordinator plan turn with
+   * structured failure context. `"abort"` skips that follow-up plan turn and
+   * records the triggering child failure for the unhandled-failure throw path.
+   */
+  readonly onChildFailure?: OnChildFailureMode;
 }
+
+/** Coordinator behavior after a real child failure in a delegated dispatch wave. */
+export type OnChildFailureMode = "continue" | "abort";
 
 /**
  * Low-level engine configuration for reusable protocol execution.
@@ -1909,6 +1931,13 @@ export interface EngineOptions {
    * Default: `undefined` (preserves the "no sub-run timeout" posture).
    */
   readonly defaultSubRunTimeoutMs?: number;
+  /**
+   * Controls how coordinator runs react after a real delegated child failure.
+   *
+   * Defaults to `"continue"`. `"abort"` skips the follow-up coordinator plan
+   * turn and records the triggering child failure for fail-fast callers.
+   */
+  readonly onChildFailure?: OnChildFailureMode;
 }
 
 /**
@@ -1929,6 +1958,8 @@ export interface RunCallOptions {
    * ceiling.
    */
   readonly maxConcurrentChildren?: number;
+  /** Per-run child-failure behavior. Overrides the engine default. */
+  readonly onChildFailure?: OnChildFailureMode;
 }
 
 /**

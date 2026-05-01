@@ -17,6 +17,7 @@ import type {
 
 const protocolNames = ["coordinator", "sequential", "broadcast", "shared"] as const;
 const budgetTiers = ["fast", "balanced", "quality"] as const;
+const onChildFailureModes = ["continue", "abort"] as const;
 
 type ValidationRule =
   | "required"
@@ -73,6 +74,7 @@ export function validateDogpileOptions(options: DogpileOptions): void {
   validateOptionalNonNegativeInteger(options.maxDepth, "maxDepth");
   validateOptionalPositiveInteger(options.maxConcurrentChildren, "maxConcurrentChildren");
   validateOptionalPositiveFiniteNumber(options.defaultSubRunTimeoutMs, "defaultSubRunTimeoutMs");
+  validateOptionalOnChildFailure(options.onChildFailure, "onChildFailure");
 }
 
 export function validateMissionIntent(intent: unknown, path = "intent"): void {
@@ -89,6 +91,7 @@ export function validateRunCallOptions(options: unknown, path = "options"): void
   const record = requireRecord(options, path);
   validateOptionalNonNegativeInteger(record.maxDepth, `${path}.maxDepth`);
   validateOptionalPositiveInteger(record.maxConcurrentChildren, `${path}.maxConcurrentChildren`);
+  validateOptionalOnChildFailure(record.onChildFailure, `${path}.onChildFailure`);
 }
 
 /**
@@ -111,6 +114,7 @@ export function validateEngineOptions(options: EngineOptions): void {
   validateOptionalNonNegativeInteger(options.maxDepth, "maxDepth");
   validateOptionalPositiveInteger(options.maxConcurrentChildren, "maxConcurrentChildren");
   validateOptionalPositiveFiniteNumber(options.defaultSubRunTimeoutMs, "defaultSubRunTimeoutMs");
+  validateOptionalOnChildFailure(options.onChildFailure, "onChildFailure");
 }
 
 /**
@@ -212,6 +216,28 @@ function validateBudgetTier(value: BudgetTier, path: string): void {
       actual: value
     });
   }
+}
+
+function validateOptionalOnChildFailure(value: unknown, path: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (value === "continue" || value === "abort") {
+    return;
+  }
+  throw new DogpileError({
+    code: "invalid-configuration",
+    message: `Invalid onChildFailure: expected "continue" or "abort", got ${JSON.stringify(value)}`,
+    retryable: false,
+    detail: {
+      kind: "configuration-validation",
+      path,
+      rule: "enum",
+      expected: onChildFailureModes.join(" | "),
+      received: describeValue(value),
+      reason: "invalid-on-child-failure"
+    }
+  });
 }
 
 /**

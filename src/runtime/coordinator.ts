@@ -75,6 +75,7 @@ export type RunProtocolFn = (input: {
   readonly currentDepth?: number;
   readonly effectiveMaxDepth?: number;
   readonly effectiveMaxConcurrentChildren?: number;
+  readonly onChildFailure?: DogpileOptions["onChildFailure"];
   /**
    * Root-run deadline (epoch ms). Children inherit `parentDeadlineMs - now()`
    * as their default timeout window so a depth-N child sees the ROOT's deadline,
@@ -117,6 +118,7 @@ interface CoordinatorRunOptions {
    */
   readonly effectiveMaxDepth?: number;
   readonly effectiveMaxConcurrentChildren?: number;
+  readonly onChildFailure?: DogpileOptions["onChildFailure"];
   /**
    * Engine `runProtocol` callback used by the delegate dispatch loop to
    * recursively run a child protocol. Optional so unit tests that exercise
@@ -146,6 +148,17 @@ interface CoordinatorRunOptions {
  */
 const MAX_DISPATCH_PER_TURN = 8;
 const DEFAULT_MAX_CONCURRENT_CHILDREN = 4;
+
+type DispatchWaveFailure = {
+  readonly childRunId: string;
+  readonly intent: string;
+  readonly error: {
+    readonly code: string;
+    readonly message: string;
+    readonly detail?: { readonly reason?: string };
+  };
+  readonly partialCost: { readonly usd: number };
+};
 
 interface Semaphore {
   acquire(): Promise<void>;
@@ -224,6 +237,7 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
   const startedAtMs = nowMs();
   let stopped = false;
   let termination: TerminationStopRecord | undefined;
+  let triggeringFailureForAbortMode: DispatchWaveFailure | undefined;
   const wrapUpHint = createWrapUpHintController({
     protocol: options.protocol,
     tier: options.tier,
@@ -440,7 +454,8 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
             started: false,
             closed: false,
             startedAtMs: Date.now(),
-            childTimeoutMs: undefined
+            childTimeoutMs: undefined,
+            failure: undefined
           };
           dispatchedChildren.set(childRunId, dispatchedChild);
           return dispatchedChild;
@@ -555,11 +570,19 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
             if (delegates.length === 1) {
               throw error;
             }
+            const dispatchedChild = dispatchedForTurn[index];
+            const failure = dispatchedChild?.failure;
+            const failureMessage = error instanceof Error ? error.message : String(error);
+            let taggedText = `[sub-run ${childRunId} failed]: ${failureMessage}`;
+            if (failure) {
+              const error = failure.error;
+              taggedText = `[sub-run ${childRunId} failed | code=${error.code} | spent=$${failure.partialCost.usd.toFixed(3)}]: ${error.message}`;
+            }
             dispatchResults.push({
               index,
               result: {
                 nextInput: "",
-                taggedText: `[sub-run ${childRunId} failed]: ${error instanceof Error ? error.message : String(error)}`,
+                taggedText,
                 completedAtMs: Date.now()
               }
             });
@@ -575,9 +598,22 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
 
         dispatchResults.sort((a, b) => a.result.completedAtMs - b.result.completedAtMs);
         const taggedResults = dispatchResults.map((entry) => entry.result.taggedText).join("\n\n");
+        const currentWaveFailures = dispatchedForTurn
+          .map((child) => child.failure)
+          .filter((failure): failure is DispatchWaveFailure => failure !== undefined);
+        if (options.onChildFailure === "abort" && currentWaveFailures.length > 0) {
+          triggeringFailureForAbortMode ??= currentWaveFailures[0];
+          break;
+        }
+        const failuresSection = buildFailuresSection(currentWaveFailures);
         const coordinatorAgent = options.agents[0] ?? { id: "coordinator", role: "coordinator" };
         const baseInput = buildCoordinatorPlanInput(options.intent, coordinatorAgent);
-        dispatchInput = `${baseInput}\n\n${taggedResults}\n\nUsing the sub-run results above, decide the next step (participate or delegate).`;
+        dispatchInput = [
+          baseInput,
+          taggedResults,
+          failuresSection,
+          "Using the sub-run results above, decide the next step (participate or delegate)."
+        ].filter((section): section is string => Boolean(section)).join("\n\n");
         dispatchCount += delegates.length;
       }
       stopIfNeeded();
@@ -733,6 +769,7 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
         cost: totalCost,
         transcript: createTranscriptLink(transcript)
       }),
+      ...(triggeringFailureForAbortMode !== undefined ? { triggeringFailureForAbortMode } : {}),
       events,
       transcript
     },
@@ -1064,6 +1101,39 @@ function buildCoordinatorPlanInput(intent: string, coordinator: AgentSpec): stri
   return `Mission: ${intent}\nCoordinator ${coordinator.id}: assign the work, name the plan, and provide the first contribution.`;
 }
 
+function buildFailuresSection(failures: readonly DispatchWaveFailure[]): string | null {
+  if (failures.length === 0) {
+    return null;
+  }
+  return [
+    "## Sub-run failures since last decision",
+    "",
+    "```json",
+    JSON.stringify(failures, null, 2),
+    "```"
+  ].join("\n");
+}
+
+function dispatchWaveFailureFromEvent(
+  intent: string,
+  event: SubRunFailedEvent
+): DispatchWaveFailure | undefined {
+  const reason = typeof event.error.detail?.["reason"] === "string" ? event.error.detail["reason"] : undefined;
+  if (reason === "sibling-failed" || reason === "parent-aborted") {
+    return undefined;
+  }
+  return {
+    childRunId: event.childRunId,
+    intent,
+    error: {
+      code: event.error.code,
+      message: event.error.message,
+      ...(reason !== undefined ? { detail: { reason } } : {})
+    },
+    partialCost: { usd: event.partialCost.usd }
+  };
+}
+
 function buildWorkerInput(
   intent: string,
   transcript: readonly TranscriptEntry[],
@@ -1139,6 +1209,7 @@ interface DispatchedChild {
   closed: boolean;
   startedAtMs: number;
   childTimeoutMs: number | undefined;
+  failure: DispatchWaveFailure | undefined;
   /** STREAM-03 hook (Phase 4). Reserved; do not use. */
   readonly streamHandle?: never;
 }
@@ -1319,6 +1390,7 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
     ...(options.effectiveMaxConcurrentChildren !== undefined
       ? { effectiveMaxConcurrentChildren: options.effectiveMaxConcurrentChildren }
       : {}),
+    ...(options.onChildFailure !== undefined ? { onChildFailure: options.onChildFailure } : {}),
     // BUDGET-02 / D-12: forward the ROOT deadline so depth-N grandchildren
     // see the same `parentDeadlineMs` rather than a fresh per-level snapshot.
     ...(parentDeadlineMs !== undefined ? { parentDeadlineMs } : {}),
@@ -1389,6 +1461,7 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
     parentEmit(failEvent);
     input.recordProtocolDecision(failEvent);
     input.dispatchedChild.closed = true;
+    input.dispatchedChild.failure = dispatchWaveFailureFromEvent(decision.intent, failEvent);
 
     // Re-throw a DogpileError so the parent run terminates with a typed error.
     if (DogpileError.isInstance(enrichedError)) {

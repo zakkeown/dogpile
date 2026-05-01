@@ -19,6 +19,7 @@ import type {
   RunEventLog,
   RunMetadata,
   RunUsage,
+  OnChildFailureMode,
   Tier,
   Trace,
   TranscriptEntry,
@@ -129,6 +130,14 @@ export function addCost(left: CostSummary, right: CostSummary): CostSummary {
     outputTokens: left.outputTokens + right.outputTokens,
     totalTokens: left.totalTokens + right.totalTokens
   };
+}
+
+export function resolveOnChildFailure(
+  runOption: OnChildFailureMode | undefined,
+  engineOption: OnChildFailureMode | undefined
+): OnChildFailureMode {
+  // onChildFailure precedence: per-run option > engine option > default.
+  return runOption ?? engineOption ?? "continue";
 }
 
 /**

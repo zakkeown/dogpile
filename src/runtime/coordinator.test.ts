@@ -615,9 +615,9 @@ function createFailureContextProvider(opts: FailureContextProviderOptions): Conf
             message: `${failingIntent} exploded`,
             providerId: opts.id,
             retryable: false,
-            detail: opts.detailReasons?.has(failingIntent)
-              ? { reason: opts.detailReasons.get(failingIntent) }
-              : undefined
+            ...(opts.detailReasons?.has(failingIntent)
+              ? { detail: { reason: opts.detailReasons.get(failingIntent)! } }
+              : {})
           });
         }
         return {
@@ -743,7 +743,7 @@ describe("coordinator delegate dispatch", () => {
       ?.messages.find((message) => message.role === "user")?.content ?? "";
 
     expect(followUpPrompt).toMatch(
-      /\[sub-run [^\]]+ failed \| code=provider-timeout \| spent=\$0\.003\]: fail first child exploded/u
+      /\[sub-run [^\]]+ failed \| code=provider-timeout \| spent=\$0\.000\]: fail first child exploded/u
     );
   });
 
@@ -790,7 +790,7 @@ describe("coordinator delegate dispatch", () => {
         message: "fail with reason exploded",
         detail: { reason: "fixture-reason" }
       },
-      partialCost: { usd: 0.003 }
+      partialCost: { usd: 0 }
     });
     expect(failures[1]).toEqual({
       childRunId: expect.any(String),
@@ -799,7 +799,7 @@ describe("coordinator delegate dispatch", () => {
         code: "provider-timeout",
         message: "fail without reason exploded"
       },
-      partialCost: { usd: 0.003 }
+      partialCost: { usd: 0 }
     });
     for (const failure of failures) {
       expect(Object.keys(failure).sort()).toEqual(["childRunId", "error", "intent", "partialCost"]);
@@ -841,7 +841,7 @@ describe("coordinator delegate dispatch", () => {
     expect(followUpPrompt).not.toContain("## Sub-run failures since last decision");
   });
 
-  it("excludes synthetic sibling-failed failures from the structured failures section", async () => {
+  it("synthetic exclusion keeps sibling-failed failures out of the structured failures section", async () => {
     const planRequests: ModelRequest[] = [];
     const provider = createFailureContextProvider({
       id: "synthetic-exclusion-model",
@@ -880,7 +880,7 @@ describe("coordinator delegate dispatch", () => {
         code: "provider-timeout",
         message: "fail first child exploded"
       },
-      partialCost: { usd: 0.003 }
+      partialCost: { usd: 0 }
     });
   });
 

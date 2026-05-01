@@ -35,6 +35,7 @@ import {
   normalizeProtocol,
   orderAgentsForTemperature,
   recomputeAccountingFromTrace,
+  resolveOnChildFailure,
   tierTemperature
 } from "./defaults.js";
 import { runSequential } from "./sequential.js";
@@ -81,6 +82,7 @@ export function createEngine(options: EngineOptions): Engine {
   const terminate = options.terminate ?? (options.budget ? conditionFromBudget(options.budget) : undefined);
   const engineMaxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
   const engineMaxConcurrentChildren = options.maxConcurrentChildren ?? DEFAULT_MAX_CONCURRENT_CHILDREN;
+  const engineOnChildFailure = options.onChildFailure;
 
   return {
     run(intent: string, runOptions?: RunCallOptions): Promise<RunResult> {
@@ -101,6 +103,7 @@ export function createEngine(options: EngineOptions): Engine {
         engineMaxConcurrentChildren,
         runOptions?.maxConcurrentChildren ?? Number.POSITIVE_INFINITY
       );
+      const onChildFailure = resolveOnChildFailure(runOptions?.onChildFailure, engineOnChildFailure);
 
       const startedAtMs = Date.now();
       const parentDeadlineMs =
@@ -123,6 +126,7 @@ export function createEngine(options: EngineOptions): Engine {
         currentDepth: 0,
         effectiveMaxDepth,
         effectiveMaxConcurrentChildren,
+        onChildFailure,
         ...(parentDeadlineMs !== undefined ? { parentDeadlineMs } : {}),
         ...(options.defaultSubRunTimeoutMs !== undefined
           ? { defaultSubRunTimeoutMs: options.defaultSubRunTimeoutMs }
@@ -148,6 +152,7 @@ export function createEngine(options: EngineOptions): Engine {
         engineMaxConcurrentChildren,
         runOptions?.maxConcurrentChildren ?? Number.POSITIVE_INFINITY
       );
+      const onChildFailure = resolveOnChildFailure(runOptions?.onChildFailure, engineOnChildFailure);
 
       const pendingEvents: StreamEvent[] = [];
       const pendingResolvers: Array<(value: IteratorResult<StreamEvent>) => void> = [];
@@ -239,6 +244,7 @@ export function createEngine(options: EngineOptions): Engine {
             currentDepth: 0,
             effectiveMaxDepth,
             effectiveMaxConcurrentChildren,
+            onChildFailure,
             ...(streamParentDeadlineMs !== undefined ? { parentDeadlineMs: streamParentDeadlineMs } : {}),
             ...(options.defaultSubRunTimeoutMs !== undefined
               ? { defaultSubRunTimeoutMs: options.defaultSubRunTimeoutMs }
@@ -632,6 +638,7 @@ interface RunProtocolOptions {
   readonly effectiveMaxDepth?: number;
   /** Effective max delegated child concurrency resolved at run start. */
   readonly effectiveMaxConcurrentChildren?: number;
+  readonly onChildFailure?: EngineOptions["onChildFailure"];
   /**
    * Root-run deadline (epoch ms) threaded through every recursive coordinator
    * dispatch (BUDGET-02 / D-12). Children inherit `parentDeadlineMs - now()`
@@ -783,6 +790,7 @@ function runProtocol(options: RunProtocolOptions): Promise<RunResult> {
         currentDepth: options.currentDepth ?? 0,
         effectiveMaxDepth: options.effectiveMaxDepth ?? Infinity,
         effectiveMaxConcurrentChildren: options.effectiveMaxConcurrentChildren ?? DEFAULT_MAX_CONCURRENT_CHILDREN,
+        onChildFailure: options.onChildFailure ?? "continue",
         ...(options.parentDeadlineMs !== undefined ? { parentDeadlineMs: options.parentDeadlineMs } : {}),
         ...(options.defaultSubRunTimeoutMs !== undefined
           ? { defaultSubRunTimeoutMs: options.defaultSubRunTimeoutMs }

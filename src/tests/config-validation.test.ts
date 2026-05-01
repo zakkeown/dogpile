@@ -11,6 +11,7 @@ import type {
   JsonValue,
   ModelRequest,
   ModelResponse,
+  RunCallOptions,
   RuntimeTool,
   RuntimeToolExecutionContext
 } from "../index.js";
@@ -915,9 +916,9 @@ describe("onChildFailure option", () => {
       ...validEngineOptions(),
       onChildFailure: "abort"
     };
-    const _runOptionsLock = {
+    const _runOptionsLock: RunCallOptions = {
       onChildFailure: "continue"
-    } satisfies Parameters<ReturnType<typeof createEngine>["run"]>[1];
+    };
     expect(_engineOptionsLock.onChildFailure).toBe("abort");
     expect(_runOptionsLock.onChildFailure).toBe("continue");
   });
