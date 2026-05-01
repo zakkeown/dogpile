@@ -42,6 +42,16 @@ import type {
   TranscriptEntry
 } from "../index.js";
 
+function protocolDecisionEventEntries(
+  events: readonly RunEvent[]
+): readonly { readonly event: RunEvent; readonly index: number }[] {
+  return events.flatMap((event, index) =>
+    event.type === "model-request" || event.type === "model-response" || event.type === "model-output-chunk"
+      ? []
+      : [{ event, index }]
+  );
+}
+
 describe("single-call result contract", () => {
   it("exports named high-level input contracts for mission, protocol selection, and budget tier controls", () => {
     const intent: MissionIntent = "Define the high-level SDK call input contract.";
@@ -233,9 +243,9 @@ describe("single-call result contract", () => {
     expect(budgetStateChanges).toEqual([
       {
         kind: "replay-trace-budget-state-change",
-        eventIndex: 2,
+        eventIndex: 4,
         eventType: "agent-turn",
-        at: eventTimestamp(result.trace.events[2]),
+        at: eventTimestamp(result.trace.events[4]),
         cost: {
           usd: 0.002,
           inputTokens: 5,
@@ -245,9 +255,9 @@ describe("single-call result contract", () => {
       },
       {
         kind: "replay-trace-budget-state-change",
-        eventIndex: 3,
+        eventIndex: 7,
         eventType: "agent-turn",
-        at: eventTimestamp(result.trace.events[3]),
+        at: eventTimestamp(result.trace.events[7]),
         cost: {
           usd: 0.004,
           inputTokens: 10,
@@ -257,9 +267,9 @@ describe("single-call result contract", () => {
       },
       {
         kind: "replay-trace-budget-state-change",
-        eventIndex: 4,
+        eventIndex: 8,
         eventType: "final",
-        at: eventTimestamp(result.trace.events[4]),
+        at: eventTimestamp(result.trace.events[8]),
         cost: result.cost
       }
     ]);
@@ -268,7 +278,13 @@ describe("single-call result contract", () => {
       source: "caller",
       value: 2603289901
     });
-    expect(decisions.map((decision) => decision.eventType)).toEqual(result.trace.events.map((event) => event.type));
+    const decisionEvents = protocolDecisionEventEntries(result.trace.events);
+    expect(decisions.map((decision) => decision.eventIndex)).toEqual(
+      decisionEvents.map((entry) => entry.index)
+    );
+    expect(decisions.map((decision) => decision.eventType)).toEqual(
+      decisionEvents.map((entry) => entry.event.type)
+    );
     expect(decisions.at(-1)).toMatchObject({
       kind: "replay-trace-protocol-decision",
       eventIndex: result.trace.events.length - 1,
@@ -386,16 +402,20 @@ describe("single-call result contract", () => {
       value: "complete-replay-artifact-seed"
     });
 
-    expect(trace.events).toHaveLength(5);
+    expect(trace.events).toHaveLength(9);
     expect(trace.events.map((event) => event.type)).toEqual([
       "role-assignment",
       "role-assignment",
+      "model-request",
+      "model-response",
       "agent-turn",
+      "model-request",
+      "model-response",
       "agent-turn",
       "final"
     ]);
     expect(trace.transcript).toHaveLength(2);
-    expect(trace.protocolDecisions).toHaveLength(trace.events.length);
+    expect(trace.protocolDecisions).toHaveLength(protocolDecisionEventEntries(trace.events).length);
     expect(trace.providerCalls).toHaveLength(trace.transcript.length);
     expect(trace.budgetStateChanges).toHaveLength(3);
 
@@ -456,18 +476,23 @@ describe("single-call result contract", () => {
     const replayed = replay(savedTrace);
     const namespacedReplay = Dogpile.replay(savedTrace);
 
-    expect(replayed).toEqual({
-      output: result.output,
-      eventLog: result.eventLog,
-      trace: savedTrace,
-      transcript: result.transcript,
-      usage: result.usage,
-      metadata: result.metadata,
-      accounting: result.accounting,
-      cost: result.cost
+    expect(replayed.output).toBe(result.output);
+    expect(replayed.trace).toBe(savedTrace);
+    expect(replayed.transcript).toEqual(result.transcript);
+    expect(replayed.usage).toEqual(result.usage);
+    expect(replayed.metadata).toEqual(result.metadata);
+    expect(replayed.accounting).toEqual(result.accounting);
+    expect(replayed.cost).toEqual(result.cost);
+    expect(replayed.eventLog).toEqual({
+      kind: "run-event-log",
+      runId: savedTrace.runId,
+      protocol: savedTrace.protocol,
+      eventTypes: replayed.eventLog.events.map((event) => event.type),
+      eventCount: replayed.eventLog.events.length,
+      events: replayed.eventLog.events
     });
     expect(namespacedReplay).toEqual(replayed);
-    expect(replayed.eventLog.events).toBe(savedTrace.events);
+    expect(replayed.eventLog.events).not.toBe(savedTrace.events);
     expect(replayed.transcript).toBe(savedTrace.transcript);
     expect(replayed.output).toBe(savedTrace.finalOutput.output);
     expect(JSON.parse(JSON.stringify(replayed))).toEqual(replayed);
@@ -609,7 +634,7 @@ describe("single-call result contract", () => {
     expect(subscriberEvents).toEqual(savedTrace.events);
     expect(replayed.output).toBe(savedTrace.finalOutput.output);
     expect(replayed.transcript).toBe(savedTrace.transcript);
-    expect(replayed.eventLog.events).toBe(savedTrace.events);
+    expect(replayed.eventLog.events).not.toBe(savedTrace.events);
     expect(replayed.trace).toBe(savedTrace);
     expect(replayed).toEqual(replay(savedTrace));
     expect(namespacedResult).toEqual(replayed);
@@ -635,12 +660,13 @@ describe("single-call result contract", () => {
     expect(result.eventLog.eventTypes).toEqual(trace.events.map((event) => event.type));
     expect(trace.events.at(-1)?.type).toBe("final");
     expect(trace.finalOutput.output).toBe(result.output);
-    expect(trace.protocolDecisions).toHaveLength(trace.events.length);
+    const decisionEvents = protocolDecisionEventEntries(trace.events);
+    expect(trace.protocolDecisions).toHaveLength(decisionEvents.length);
     expect(trace.protocolDecisions.map((decision) => decision.eventIndex)).toEqual(
-      trace.events.map((_event, index) => index)
+      decisionEvents.map((entry) => entry.index)
     );
     expect(trace.protocolDecisions.map((decision) => decision.eventType)).toEqual(
-      trace.events.map((event) => event.type)
+      decisionEvents.map((entry) => entry.event.type)
     );
 
     expect(trace.providerCalls).toHaveLength(trace.transcript.length);
@@ -675,12 +701,35 @@ describe("single-call result contract", () => {
     }[] = [
       {
         protocol: { kind: "sequential", maxTurns: 2 },
-        expectedEventTypes: ["role-assignment", "role-assignment", "agent-turn", "agent-turn", "final"],
+        expectedEventTypes: [
+          "role-assignment",
+          "role-assignment",
+          "model-request",
+          "model-response",
+          "agent-turn",
+          "model-request",
+          "model-response",
+          "agent-turn",
+          "final"
+        ],
         transcriptLength: 2
       },
       {
         protocol: { kind: "coordinator", maxTurns: 2 },
-        expectedEventTypes: ["role-assignment", "role-assignment", "agent-turn", "agent-turn", "agent-turn", "final"],
+        expectedEventTypes: [
+          "role-assignment",
+          "role-assignment",
+          "model-request",
+          "model-response",
+          "agent-turn",
+          "model-request",
+          "model-response",
+          "agent-turn",
+          "model-request",
+          "model-response",
+          "agent-turn",
+          "final"
+        ],
         transcriptLength: 3
       },
       {
@@ -688,6 +737,10 @@ describe("single-call result contract", () => {
         expectedEventTypes: [
           "role-assignment",
           "role-assignment",
+          "model-request",
+          "model-request",
+          "model-response",
+          "model-response",
           "agent-turn",
           "agent-turn",
           "broadcast",
@@ -697,7 +750,17 @@ describe("single-call result contract", () => {
       },
       {
         protocol: { kind: "shared", maxTurns: 2 },
-        expectedEventTypes: ["role-assignment", "role-assignment", "agent-turn", "agent-turn", "final"],
+        expectedEventTypes: [
+          "role-assignment",
+          "role-assignment",
+          "model-request",
+          "model-request",
+          "model-response",
+          "model-response",
+          "agent-turn",
+          "agent-turn",
+          "final"
+        ],
         transcriptLength: 2
       }
     ];
@@ -822,11 +885,12 @@ describe("single-call result contract", () => {
       });
 
       expect(result.trace.protocolDecisions.map((decision) => decision.decision)).toEqual(testCase.decisions);
+      const decisionEvents = protocolDecisionEventEntries(result.trace.events);
       expect(result.trace.protocolDecisions.map((decision) => decision.eventIndex)).toEqual(
-        result.trace.protocolDecisions.map((_decision, index) => index)
+        decisionEvents.map((entry) => entry.index)
       );
       expect(result.trace.protocolDecisions.map((decision) => decision.eventType)).toEqual(
-        result.trace.events.map((event) => event.type)
+        decisionEvents.map((entry) => entry.event.type)
       );
       expect(result.trace.protocolDecisions.every((decision) => decision.protocol === testCase.protocol.kind)).toBe(
         true
@@ -901,7 +965,13 @@ describe("single-call result contract", () => {
     releaseGeneration();
     const result = await resultPromise;
 
-    expect(result.trace.events.map((event) => event.type)).toEqual(["role-assignment", "agent-turn", "final"]);
+    expect(result.trace.events.map((event) => event.type)).toEqual([
+      "role-assignment",
+      "model-request",
+      "model-response",
+      "agent-turn",
+      "final"
+    ]);
     expect(result.eventLog.events).toEqual(result.trace.events);
     expect(result.transcript).toEqual(result.trace.transcript);
     expect(result.output).toContain("completed finisher turn");

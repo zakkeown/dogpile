@@ -14,6 +14,7 @@ import type {
   RunEvaluation,
   RunEvent,
   RunResult,
+  ReplayTraceProviderCall,
   SubRunFailedEvent,
   StreamErrorEvent,
   StreamEvent,
@@ -931,7 +932,11 @@ export function replay(trace: Trace): RunResult {
   }
   const baseResult = {
     output: trace.finalOutput.output,
-    eventLog: createRunEventLog(trace.runId, trace.protocol, trace.events),
+    eventLog: createRunEventLog(
+      trace.runId,
+      trace.protocol,
+      synthesizeProviderEvents(trace, trace.providerCalls)
+    ),
     trace,
     transcript: trace.transcript,
     usage: createRunUsage(cost),
@@ -956,6 +961,52 @@ export function replay(trace: Trace): RunResult {
     ...(lastEvent.quality !== undefined ? { quality: lastEvent.quality } : {}),
     ...(lastEvent.evaluation !== undefined ? { evaluation: lastEvent.evaluation } : {})
   };
+}
+
+function synthesizeProviderEvents(
+  trace: Trace,
+  providerCalls: readonly ReplayTraceProviderCall[]
+): readonly RunEvent[] {
+  const baseEvents = trace.events.filter(
+    (event) => event.type !== "model-request" && event.type !== "model-response"
+  );
+  const result: RunEvent[] = [];
+  let turnCount = 0;
+
+  for (const event of baseEvents) {
+    if (event.type === "agent-turn") {
+      const call = providerCalls[turnCount];
+      if (call !== undefined) {
+        result.push({
+          type: "model-request",
+          runId: trace.runId,
+          callId: call.callId,
+          providerId: call.providerId,
+          modelId: call.modelId,
+          startedAt: call.startedAt,
+          agentId: call.agentId,
+          role: call.role,
+          request: call.request
+        });
+        result.push({
+          type: "model-response",
+          runId: trace.runId,
+          callId: call.callId,
+          providerId: call.providerId,
+          modelId: call.modelId,
+          startedAt: call.startedAt,
+          completedAt: call.completedAt,
+          agentId: call.agentId,
+          role: call.role,
+          response: call.response
+        });
+      }
+      turnCount += 1;
+    }
+    result.push(event);
+  }
+
+  return result;
 }
 
 function resolveRuntimeTerminalThrow(
