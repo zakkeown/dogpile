@@ -24,6 +24,16 @@ v0.5.0 Observability and Auditability starts with provenance annotations: model 
 - **New root-exported health types.** `AnomalyCode`, `HealthAnomaly`, and `RunHealthSummary` are exported from `@dogpile/sdk`.
 - **Frozen health anomaly fixture.** `src/tests/fixtures/anomaly-record-v1.json` records one sample `HealthAnomaly` per anomaly code. `provider-error-recovered` is present in the `AnomalyCode` union and fixture but is not emitted by `computeHealth()` in Phase 7 because current traces have no provider-recovery signal without an event-shape change.
 
+### Added — Audit Event Schema (Phase 8)
+
+- **New subpath: `@dogpile/sdk/runtime/audit`.** Exports `createAuditRecord(trace)`, `AuditRecord`, `AuditOutcome`, `AuditCost`, `AuditAgentRecord`, and `AuditOutcomeStatus`.
+- **`createAuditRecord(trace: Trace): AuditRecord`.** Pure function that derives a versioned, schema-stable audit record from any completed trace. It works on live `RunResult.trace` values and stored/replayed traces without I/O, storage, or provider access.
+- **`AuditRecord` standalone type.** The audit schema is independent of `RunEvent` variants and contains `auditSchemaVersion`, `runId`, `intent`, `startedAt`, `completedAt`, `protocol`, `tier`, `modelProviderId`, `agentCount`, `turnCount`, `outcome`, `cost`, `agents`, and optional `childRunIds`.
+- **Budget-stop audit outcome.** `AuditOutcome` uses `{ status: "completed" | "budget-stopped" | "aborted"; terminationCode?: string }`; `terminationCode` carries the normalized budget stop reason (`"cost"`, `"tokens"`, `"iterations"`, or `"timeout"`) for budget-stopped runs.
+- **Frozen audit record fixture.** `src/tests/fixtures/audit-record-v1.json` records the canonical AuditRecord v1 field order and shallow type shape. Intentional AuditRecord schema changes must update the JSON fixture, companion `audit-record-v1.type-check.ts`, and shape test together.
+
+**Note:** Audit records are not auto-attached to `RunResult`. Callers explicitly invoke `createAuditRecord(result.trace)`.
+
 ### Replay
 
 - **`replay()` synthesizes `model-request` / `model-response` events from `trace.providerCalls`.** The augmented event log returned by `replay()` includes provenance events derived from the canonical `providerCalls` anchor. This ensures provenance fields in replayed results are identical to those in live runs (PROV-02). Older traces without these events in `trace.events` gain them on replay.
