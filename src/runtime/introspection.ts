@@ -84,5 +84,39 @@ export function queryEvents(events: readonly RunEvent[], filter: EventQueryFilte
 export function queryEvents(events: readonly RunEvent[], filter: EventQueryFilter): RunEvent[];
 // Implementation signature (not visible to callers):
 export function queryEvents(events: readonly RunEvent[], filter: EventQueryFilter): RunEvent[] {
-  throw new Error("queryEvents: not implemented - see plan 07-02");
+  let result: RunEvent[] = filter.type !== undefined
+    ? events.filter((event) => event.type === filter.type)
+    : [...events];
+
+  if (filter.agentId !== undefined) {
+    const { agentId } = filter;
+    result = result.filter((event) => "agentId" in event && (event as { agentId?: string }).agentId === agentId);
+  }
+
+  if (filter.turnRange !== undefined) {
+    const { min, max } = filter.turnRange;
+    const agentTurnEvents = events.filter((event): event is TurnEvent => event.type === "agent-turn");
+    const inRangeSet = new Set<RunEvent>(
+      agentTurnEvents.filter((_, index) => {
+        const position = index + 1;
+        return (min === undefined || position >= min) && (max === undefined || position <= max);
+      })
+    );
+
+    result = result.filter((event) => event.type === "agent-turn" && inRangeSet.has(event));
+  }
+
+  if (filter.costRange !== undefined) {
+    const { min, max } = filter.costRange;
+    result = result.filter((event) => {
+      if (event.type !== "agent-turn" && event.type !== "broadcast") {
+        return false;
+      }
+
+      const usd = event.cost.usd;
+      return (min === undefined || usd >= min) && (max === undefined || usd <= max);
+    });
+  }
+
+  return result;
 }
