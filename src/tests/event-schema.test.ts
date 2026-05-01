@@ -21,6 +21,7 @@ import type {
   StreamEvent,
   StreamLifecycleEvent,
   StreamOutputEvent,
+  SubRunBudgetClampedEvent,
   SubRunCompletedEvent,
   SubRunFailedEvent,
   SubRunParentAbortedEvent,
@@ -46,6 +47,7 @@ const expectedEventTypes = [
   "sub-run-completed",
   "sub-run-failed",
   "sub-run-parent-aborted",
+  "sub-run-budget-clamped",
   "budget-stop",
   "final"
 ] as const satisfies readonly RunEvent["type"][];
@@ -67,6 +69,7 @@ describe("trace event schema", () => {
       "sub-run-completed",
       "sub-run-failed",
       "sub-run-parent-aborted",
+      "sub-run-budget-clamped",
       "budget-stop",
       "final"
     ]);
@@ -491,6 +494,42 @@ describe("trace event schema", () => {
     ]);
     expect(fixture.runId).toBe(fixture.parentRunId);
     expect(fixture.reason).toBe("parent-aborted");
+    expectIsoTimestamp(fixture.at);
+    expect(JSON.parse(JSON.stringify(fixture))).toEqual(fixture);
+  });
+
+  it("locks the sub-run-budget-clamped event payload shape and JSON round-trip", () => {
+    // BUDGET-02 / D-12 typed-import lock: SubRunBudgetClampedEvent is a public
+    // TS surface variant. If the type is removed from src/index.ts (or its
+    // re-export blocks in src/types.ts), this file fails compile.
+    const fixture: SubRunBudgetClampedEvent = {
+      type: "sub-run-budget-clamped",
+      runId: "run-parent-sub-run-budget-clamped",
+      at: "2026-04-30T00:00:04.000Z",
+      childRunId: "run-child-sub-run-budget-clamped",
+      parentRunId: "run-parent-sub-run-budget-clamped",
+      parentDecisionId: "decision-7",
+      requestedTimeoutMs: 5000,
+      clampedTimeoutMs: 200,
+      reason: "exceeded-parent-remaining"
+    };
+    const variant: RunEvent = fixture;
+
+    expect(variant.type).toBe("sub-run-budget-clamped");
+    expect(sortedKeys(fixture)).toEqual([
+      "at",
+      "childRunId",
+      "clampedTimeoutMs",
+      "parentDecisionId",
+      "parentRunId",
+      "reason",
+      "requestedTimeoutMs",
+      "runId",
+      "type"
+    ]);
+    expect(fixture.runId).toBe(fixture.parentRunId);
+    expect(fixture.reason).toBe("exceeded-parent-remaining");
+    expect(fixture.clampedTimeoutMs).toBeLessThan(fixture.requestedTimeoutMs);
     expectIsoTimestamp(fixture.at);
     expect(JSON.parse(JSON.stringify(fixture))).toEqual(fixture);
   });

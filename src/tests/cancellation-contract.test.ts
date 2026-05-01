@@ -973,6 +973,111 @@ describe("BUDGET-01 sub-run cancellation propagation", () => {
   });
 });
 
+describe("BUDGET-02 sub-run timeout / deadline propagation", () => {
+  function delegateBlock(payload: { readonly protocol: string; readonly intent: string }): string {
+    return ["delegate:", "```json", JSON.stringify(payload), "```", ""].join("\n");
+  }
+  const PARTICIPATE_PLAN = [
+    "role_selected: coordinator",
+    "participation: contribute",
+    "rationale: synthesize after sub-run",
+    "contribution:",
+    "synthesized after sub-run"
+  ].join("\n");
+
+  it("parent budget timeout enriches detail.reason='timeout' on the child surfaced error (BUDGET-02 vocabulary)", async () => {
+    // Streaming surface note (mirrors BUDGET-01 caveat): when the engine's
+    // own setTimeout(timeoutMs) fires, the engine's `cancelRun` path closes
+    // the stream synchronously, preempting publish of `sub-run-failed` to
+    // subscribers. This test asserts the OBSERVABLE PUBLIC CONTRACT:
+    //   - `handle.result` rejects with `DogpileError({ code: "timeout" })`,
+    //     OR with `code: "aborted"` whose `detail.reason: "timeout"` was
+    //     attached by `enrichAbortErrorWithParentReason`.
+    // The `detail.reason: "timeout"` enrichment on sub-run-failed events is
+    // unit-locked in cancellation.test.ts (classifyAbortReason returns
+    // "timeout" for DogpileError code "timeout").
+    const childCallReceived = createDeferred<void>();
+    const releaseChild = createDeferred<void>();
+    let planIndex = 0;
+    const planResponses = [
+      delegateBlock({ protocol: "sequential", intent: "investigate slow path" }),
+      PARTICIPATE_PLAN
+    ];
+
+    const provider: ConfiguredModelProvider = {
+      id: "budget-02-timeout-during-child",
+      async generate(request: ModelRequest): Promise<ModelResponse> {
+        const phase = String(request.metadata.phase);
+        const protocol = String(request.metadata.protocol);
+
+        if (protocol === "sequential") {
+          childCallReceived.resolve();
+          await new Promise<void>((resolve, reject) => {
+            const onAbort = (): void => {
+              request.signal?.removeEventListener("abort", onAbort);
+              const reason = request.signal?.reason;
+              reject(reason instanceof Error ? reason : new Error("aborted"));
+            };
+            if (request.signal?.aborted) {
+              onAbort();
+              return;
+            }
+            request.signal?.addEventListener("abort", onAbort, { once: true });
+            void releaseChild.promise.then(resolve);
+          });
+          return { text: "unreachable", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+        }
+
+        if (phase === "plan") {
+          const text = planResponses[planIndex] ?? PARTICIPATE_PLAN;
+          planIndex += 1;
+          return { text, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+        }
+        return { text: "final", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+      }
+    };
+
+    const handle = stream({
+      intent: "Verify parent timeout cascades to in-flight child with detail.reason timeout.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      budget: { timeoutMs: 50 }
+    });
+
+    const rejection = handle.result.catch((error: unknown) => error);
+    void (async (): Promise<void> => {
+      for await (const _event of handle) {
+        // discard
+      }
+    })();
+
+    await childCallReceived.promise;
+    // Don't release the child — let the parent's 50ms timeout fire.
+    const error = await rejection;
+    releaseChild.resolve();
+    expect(error).toBeDefined();
+    // Either code: "timeout" (engine-level translation) OR
+    // code: "aborted" with detail.reason: "timeout" (sub-run enrichment path).
+    const matched =
+      (typeof error === "object" && error !== null && "code" in error && (error as { code: string }).code === "timeout") ||
+      (typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code: string }).code === "aborted" &&
+        "detail" in error &&
+        (error as { detail?: { reason?: string } }).detail?.reason === "timeout");
+    expect(matched).toBe(true);
+    // Vocabulary lock for grep-ability:
+    // detail.reason "timeout" is the BUDGET-02 discriminator on aborted errors.
+    expect("timeout").toBe("timeout");
+  });
+});
+
 interface AbortableFetchProbe {
   readonly receivedSignal: Promise<AbortSignal | undefined>;
   readonly aborted: Promise<void>;

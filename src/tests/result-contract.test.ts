@@ -32,6 +32,7 @@ import type {
   RunResult,
   RunUsage,
   StreamEvent,
+  SubRunBudgetClampedEvent,
   SubRunCompletedEvent,
   SubRunParentAbortedEvent,
   Trace,
@@ -988,6 +989,27 @@ describe("single-call result contract", () => {
     const roundTripped = JSON.parse(JSON.stringify(fixture)) as SubRunParentAbortedEvent;
     expect(roundTripped).toEqual(fixture);
     expect(roundTripped.reason).toBe("parent-aborted");
+  });
+
+  it("round-trips a sub-run-budget-clamped RunEvent variant through JSON serialization", () => {
+    const fixture: SubRunBudgetClampedEvent = {
+      type: "sub-run-budget-clamped",
+      runId: "run-parent-budget-clamped-roundtrip",
+      at: "2026-04-30T00:00:05.000Z",
+      childRunId: "run-child-budget-clamped-roundtrip",
+      parentRunId: "run-parent-budget-clamped-roundtrip",
+      parentDecisionId: "decision-9",
+      requestedTimeoutMs: 10_000,
+      clampedTimeoutMs: 250,
+      reason: "exceeded-parent-remaining"
+    };
+    const variant: RunEvent = fixture;
+    expect(variant.type).toBe("sub-run-budget-clamped");
+    const roundTripped = JSON.parse(JSON.stringify(fixture)) as SubRunBudgetClampedEvent;
+    expect(roundTripped).toEqual(fixture);
+    expect(roundTripped.reason).toBe("exceeded-parent-remaining");
+    expect(roundTripped.requestedTimeoutMs).toBe(10_000);
+    expect(roundTripped.clampedTimeoutMs).toBe(250);
   });
 });
 

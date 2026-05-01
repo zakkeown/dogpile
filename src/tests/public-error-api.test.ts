@@ -92,6 +92,34 @@ describe("public DogpileError API", () => {
     });
   });
 
+  it("locks the BUDGET-02 detail.reason vocabulary on code: aborted errors (timeout)", () => {
+    // BUDGET-02 / D-12: parent timeouts surface on the child as
+    // `code: "aborted"` with `detail.reason: "timeout"`. This pairs with the
+    // BUDGET-01 `parent-aborted` lock above to fully cover the documented
+    // vocabulary on aborted errors.
+    const error = new DogpileError({
+      code: "aborted",
+      message: "Parent deadline elapsed before sub-run dispatch.",
+      retryable: false,
+      providerId: "budget-02-detail-reason-lock",
+      detail: {
+        reason: "timeout"
+      }
+    });
+    expect(error.code).toBe("aborted");
+    expect(error.detail).toEqual({ reason: "timeout" });
+    expect(error.toJSON()).toEqual({
+      name: "DogpileError",
+      code: "aborted",
+      message: "Parent deadline elapsed before sub-run dispatch.",
+      retryable: false,
+      providerId: "budget-02-detail-reason-lock",
+      detail: {
+        reason: "timeout"
+      }
+    });
+  });
+
   it("guards cross-realm error-shaped values with the stable code set", () => {
     expect(
       DogpileError.isInstance({

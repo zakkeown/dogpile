@@ -731,6 +731,76 @@ describe("maxDepth option", () => {
   });
 });
 
+describe("BUDGET-02 defaultSubRunTimeoutMs validation + public-surface lock", () => {
+  it.each([
+    { name: "negative", value: -1 },
+    { name: "zero", value: 0 },
+    { name: "NaN", value: Number.NaN },
+    { name: "Infinity", value: Number.POSITIVE_INFINITY },
+    { name: "non-number string", value: "1000" }
+  ] as const)(
+    "createEngine rejects defaultSubRunTimeoutMs=$name with invalid-configuration on path=defaultSubRunTimeoutMs",
+    ({ value }) => {
+      expectInvalidConfiguration(
+        () =>
+          createEngine({
+            protocol: { kind: "sequential", maxTurns: 1 },
+            tier: "fast",
+            model: validModelProvider,
+            defaultSubRunTimeoutMs: value as number
+          } as unknown as EngineOptions),
+        "defaultSubRunTimeoutMs"
+      );
+    }
+  );
+
+  it.each([
+    { name: "negative", value: -1 },
+    { name: "zero", value: 0 },
+    { name: "NaN", value: Number.NaN }
+  ] as const)(
+    "run() rejects defaultSubRunTimeoutMs=$name before any provider call: $name",
+    ({ value }) => {
+      expectInvalidConfiguration(
+        () =>
+          run({
+            ...validDogpileOptions,
+            defaultSubRunTimeoutMs: value as number
+          } as DogpileOptions),
+        "defaultSubRunTimeoutMs"
+      );
+    }
+  );
+
+  it("createEngine accepts a valid positive finite defaultSubRunTimeoutMs", () => {
+    expect(() =>
+      createEngine({
+        protocol: { kind: "sequential", maxTurns: 1 },
+        tier: "fast",
+        model: validModelProvider,
+        defaultSubRunTimeoutMs: 1000
+      })
+    ).not.toThrow();
+  });
+
+  // BLOCKER 2 unambiguous typed-field lock: if `defaultSubRunTimeoutMs` is
+  // removed from the public `EngineOptions` type re-exported through
+  // src/index.ts, this file fails compile (typecheck exits non-zero).
+  // Note (deviation from plan): the plan example included `intent` on the
+  // lock object, but `intent` lives on `DogpileOptions`, NOT `EngineOptions`.
+  // Dropped it here as an inline correction.
+  it("locks defaultSubRunTimeoutMs as a public field on the engine-options type union", () => {
+    const _engineOptionsLock: EngineOptions = {
+      protocol: { kind: "sequential", maxTurns: 1 },
+      tier: "fast",
+      model: { id: "lock", generate: async () => ({ text: "" }) },
+      defaultSubRunTimeoutMs: 1000
+    };
+    void _engineOptionsLock;
+    expect(_engineOptionsLock.defaultSubRunTimeoutMs).toBe(1000);
+  });
+});
+
 /**
  * Coordinator provider that always returns a delegate-to-coordinator decision
  * on the plan turn, producing a chain of nested sub-runs until the depth gate

@@ -916,3 +916,216 @@ describe("coordinator delegate dispatch", () => {
     expect(completedCount).toBe(8);
   });
 });
+
+describe("BUDGET-02 sub-run timeout / deadline propagation", () => {
+  it("clamps decision.budget.timeoutMs that exceeds parent's remaining and emits sub-run-budget-clamped before sub-run-started", async () => {
+    // Parent has a 1000ms tree-wide deadline. Child decision asks for 5000ms.
+    // Even when dispatch happens immediately (remainingMs ≈ 1000), the
+    // decision exceeds the parent's remaining and must be clamped to ≤ 1000ms,
+    // with `sub-run-budget-clamped` emitted on the parent trace BEFORE
+    // `sub-run-started`. The clamp event captures requestedTimeoutMs=5000 and
+    // clampedTimeoutMs <= 1000.
+    const provider = createScriptedCoordinatorProvider({
+      id: "budget-02-clamp-event-model",
+      planResponses: [
+        delegateBlock({
+          protocol: "sequential",
+          intent: "child whose decision-level timeout exceeds parent remaining",
+          budget: { timeoutMs: 5000 }
+        }),
+        PARTICIPATE_OUTPUT
+      ]
+    });
+
+    const result = await run({
+      intent: "Verify clamp emits sub-run-budget-clamped before sub-run-started.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      budget: { timeoutMs: 1000 }
+    });
+
+    const clampEvents = result.trace.events.filter((event) => event.type === "sub-run-budget-clamped");
+    const startedEvents = result.trace.events.filter((event) => event.type === "sub-run-started");
+    expect(clampEvents).toHaveLength(1);
+    expect(startedEvents).toHaveLength(1);
+
+    const clampEvent = clampEvents[0];
+    if (clampEvent?.type !== "sub-run-budget-clamped") throw new Error("expected sub-run-budget-clamped");
+    expect(clampEvent.requestedTimeoutMs).toBe(5000);
+    expect(clampEvent.clampedTimeoutMs).toBeLessThanOrEqual(1000);
+    expect(clampEvent.clampedTimeoutMs).toBeGreaterThan(0);
+    expect(clampEvent.reason).toBe("exceeded-parent-remaining");
+
+    // Ordering: the clamp event must appear BEFORE sub-run-started in the trace.
+    const clampIndex = result.trace.events.indexOf(clampEvent);
+    const startedIndex = result.trace.events.findIndex((event) => event.type === "sub-run-started");
+    expect(clampIndex).toBeGreaterThanOrEqual(0);
+    expect(startedIndex).toBeGreaterThan(clampIndex);
+
+    // Sub-run-started must reference the same childRunId as the clamp event.
+    const startedEvent = startedEvents[0];
+    if (startedEvent?.type !== "sub-run-started") throw new Error("expected sub-run-started");
+    expect(clampEvent.childRunId).toBe(startedEvent.childRunId);
+
+    // Trace round-trips through JSON (locks the variant on a real run shape).
+    expect(JSON.parse(JSON.stringify(result.trace))).toEqual(result.trace);
+  });
+
+  it("does NOT emit sub-run-budget-clamped on the happy path (decision within parent remaining)", async () => {
+    const provider = createScriptedCoordinatorProvider({
+      id: "budget-02-no-clamp-model",
+      planResponses: [
+        delegateBlock({
+          protocol: "sequential",
+          intent: "child whose decision-level timeout fits parent remaining",
+          budget: { timeoutMs: 100 }
+        }),
+        PARTICIPATE_OUTPUT
+      ]
+    });
+
+    const result = await run({
+      intent: "Verify happy path skips sub-run-budget-clamped.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      budget: { timeoutMs: 5000 }
+    });
+
+    expect(result.trace.events.some((event) => event.type === "sub-run-budget-clamped")).toBe(false);
+    expect(result.trace.events.some((event) => event.type === "sub-run-started")).toBe(true);
+  });
+
+  it("zero-remaining gate throws code: aborted with detail.reason 'timeout' BEFORE sub-run-started", async () => {
+    // Drive `runCoordinator` directly with `parentDeadlineMs` set in the past
+    // so the zero-remaining gate fires deterministically. This exercises the
+    // gate without entanglement with the engine-level setTimeout(timeoutMs)
+    // path that would otherwise abort the whole tree first.
+    const { runCoordinator } = await import("../runtime/coordinator.js");
+    const observedEvents: RunEvent[] = [];
+    const provider: ConfiguredModelProvider = {
+      id: "budget-02-zero-remaining-direct",
+      async generate(request: ModelRequest): Promise<ModelResponse> {
+        const phase = String(request.metadata.phase);
+        if (phase === "plan") {
+          return {
+            text: delegateBlock({ protocol: "sequential", intent: "should not start" }),
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            costUsd: 0
+          };
+        }
+        return {
+          text: phase === "worker" ? "worker output" : "final output",
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          costUsd: 0
+        };
+      }
+    };
+
+    const outcome = await runCoordinator({
+      intent: "Direct coordinator run with already-elapsed parentDeadlineMs.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      tools: [],
+      temperature: 0.5,
+      parentDeadlineMs: Date.now() - 10_000,
+      runProtocol: async () => {
+        throw new Error("runProtocol must NOT be called when zero-remaining gate fires");
+      },
+      emit(event: RunEvent): void {
+        observedEvents.push(event);
+      }
+    }).then(
+      (result) => ({ ok: true as const, result }),
+      (error: unknown) => ({ ok: false as const, error })
+    );
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected zero-remaining gate to throw");
+    expect(DogpileError.isInstance(outcome.error)).toBe(true);
+    if (!DogpileError.isInstance(outcome.error)) throw new Error("not DogpileError");
+    expect(outcome.error.code).toBe("aborted");
+    expect(outcome.error.detail?.["reason"]).toBe("timeout");
+    expect(outcome.error.message).toContain("Parent deadline elapsed");
+    // Crucially: sub-run-started never fired.
+    expect(observedEvents.some((event) => event.type === "sub-run-started")).toBe(false);
+    expect(observedEvents.some((event) => event.type === "sub-run-budget-clamped")).toBe(false);
+  });
+
+  it("defaultSubRunTimeoutMs precedence: applies when neither parent nor decision specifies a timeout", async () => {
+    const childBudgetsSeen: Array<number | undefined> = [];
+    const provider = createScriptedCoordinatorProvider({
+      id: "budget-02-default-precedence-model",
+      planResponses: [
+        delegateBlock({ protocol: "sequential", intent: "no decision-level budget" }),
+        PARTICIPATE_OUTPUT
+      ]
+    });
+    // Spy on child sub-run-completed events to inspect the actual budget the
+    // child run executed under (via the embedded child trace).
+    const result = await run({
+      intent: "Verify defaultSubRunTimeoutMs is applied when neither parent nor decision specifies.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      defaultSubRunTimeoutMs: 7777
+    });
+
+    for (const event of result.trace.events) {
+      if (event.type === "sub-run-completed") {
+        childBudgetsSeen.push(event.subResult.trace.budget.caps?.timeoutMs);
+      }
+    }
+    expect(childBudgetsSeen).toHaveLength(1);
+    expect(childBudgetsSeen[0]).toBe(7777);
+  });
+
+  it("defaultSubRunTimeoutMs is IGNORED when the parent has a budget.timeoutMs (parent's remaining wins)", async () => {
+    const provider = createScriptedCoordinatorProvider({
+      id: "budget-02-default-ignored-model",
+      planResponses: [
+        delegateBlock({ protocol: "sequential", intent: "parent budget wins" }),
+        PARTICIPATE_OUTPUT
+      ]
+    });
+
+    const result = await run({
+      intent: "Verify defaultSubRunTimeoutMs is ignored when parent has a budget.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      budget: { timeoutMs: 2000 },
+      defaultSubRunTimeoutMs: 99_999
+    });
+
+    const completed = result.trace.events.find((event) => event.type === "sub-run-completed");
+    if (completed?.type !== "sub-run-completed") throw new Error("expected sub-run-completed");
+    const childTimeoutMs = completed.subResult.trace.budget.caps?.timeoutMs;
+    // Parent's remaining (≤ 2000ms) wins; engine default of 99_999 must not leak through.
+    expect(childTimeoutMs).toBeDefined();
+    expect(childTimeoutMs).toBeLessThanOrEqual(2000);
+    expect(childTimeoutMs).not.toBe(99_999);
+  });
+});
