@@ -665,6 +665,54 @@ describe("SDK streaming API", () => {
     expect(parentRunIdsOf(replayedGrandchild)).toEqual(parentRunIdsOf(liveGrandchild));
   });
 
+  it("STREAM-03 emits in-flight parent-aborted failures before aborted and terminal error on cancel", async () => {
+    const provider = createAbortableFanOutProvider("stream-03-cancel-fan-out-model");
+    const handle = stream({
+      intent: "Cancel during child fan-out.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      maxConcurrentChildren: 2,
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+    const events: StreamEvent[] = [];
+    handle.subscribe((event) => {
+      events.push(event);
+    });
+    const result = handle.result.catch((error: unknown) => error);
+
+    await provider.waitForStartedChildren(2);
+    handle.cancel();
+    await result;
+
+    const failed = events.filter((event) => event.type === "sub-run-failed");
+    const parentAborted = failed.filter(
+      (event) => event.error.code === "aborted" && event.error.detail?.["reason"] === "parent-aborted"
+    );
+    const siblingFailed = failed.filter(
+      (event) => event.error.code === "aborted" && event.error.detail?.["reason"] === "sibling-failed"
+    );
+    const abortedIndex = events.findIndex((event) => event.type === "aborted");
+    const errorIndex = events.findIndex((event) => event.type === "error");
+
+    expect(parentAborted).toHaveLength(2);
+    expect(parentAborted.every((event) => event.partialTrace.events.length > 0)).toBe(true);
+    expect(parentAborted.every((event) => event.partialCost.usd === 0)).toBe(true);
+    expect(siblingFailed).toHaveLength(1);
+    expect(abortedIndex).toBeGreaterThan(-1);
+    expect(errorIndex).toBeGreaterThan(abortedIndex);
+    expect(Math.max(...parentAborted.map((event) => events.indexOf(event)))).toBeLessThan(abortedIndex);
+    expect(events[errorIndex]).toMatchObject({
+      type: "error",
+      detail: {
+        code: "aborted"
+      }
+    });
+  });
+
   it("yields agent-turn events during sequential protocol execution before the result resolves", async () => {
     const gates = createResponseGates(["first turn", "second turn"]);
     const model = createGatedModelProvider("gated-sequential-model", gates);
@@ -874,6 +922,73 @@ function createDelegatingProvider(id: string, planResponses: readonly string[]):
       return response(text);
     }
   };
+}
+
+interface AbortableFanOutProvider extends ConfiguredModelProvider {
+  waitForStartedChildren(count: number): Promise<void>;
+}
+
+function createAbortableFanOutProvider(id: string): AbortableFanOutProvider {
+  let planIndex = 0;
+  const childSignals: AbortSignal[] = [];
+  const waiters: Array<{ readonly count: number; readonly resolve: () => void }> = [];
+  const notify = (): void => {
+    for (let index = waiters.length - 1; index >= 0; index -= 1) {
+      const waiter = waiters[index];
+      if (waiter && childSignals.length >= waiter.count) {
+        waiters.splice(index, 1);
+        waiter.resolve();
+      }
+    }
+  };
+
+  return {
+    id,
+    async generate(request: ModelRequest): Promise<ModelResponse> {
+      const phase = String(request.metadata.phase);
+      const protocol = String(request.metadata.protocol);
+      if (protocol === "coordinator" && phase === "plan") {
+        const text =
+          planIndex === 0
+            ? delegateBlock([
+              { protocol: "sequential", intent: "cancel child 0" },
+              { protocol: "sequential", intent: "cancel child 1" },
+              { protocol: "sequential", intent: "queued child 2" }
+            ])
+            : PARTICIPATE_OUTPUT;
+        planIndex += 1;
+        return response(text);
+      }
+      if (protocol === "coordinator") {
+        return response("parent final output");
+      }
+
+      if (!request.signal) {
+        throw new Error("child request missing abort signal");
+      }
+      childSignals.push(request.signal);
+      notify();
+      await waitForAbort(request.signal);
+      throw request.signal.reason;
+    },
+    waitForStartedChildren(count: number): Promise<void> {
+      if (childSignals.length >= count) {
+        return Promise.resolve();
+      }
+      return new Promise((resolve) => {
+        waiters.push({ count, resolve });
+      });
+    }
+  };
+}
+
+function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
 }
 
 function createChunkingDelegateProvider(options: {

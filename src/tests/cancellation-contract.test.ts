@@ -127,6 +127,41 @@ describe("caller cancellation contract", () => {
     expect(result.trace.events.filter((event) => event.type === "sub-run-started")).toHaveLength(1);
   });
 
+  it("locks parent-aborted vocabulary for synthetic cancel-drain sub-run failures", async () => {
+    const provider = createAbortableFanOutProvider("parent-aborted-synthetic-vocabulary-model");
+    const handle = stream({
+      intent: "Cancel fan-out and inspect synthetic child failures.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      maxConcurrentChildren: 2,
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+    const events: StreamEvent[] = [];
+    handle.subscribe((event) => {
+      events.push(event);
+    });
+    const result = handle.result.catch((error: unknown) => error);
+
+    await provider.waitForStartedChildren(2);
+    handle.cancel();
+    await result;
+
+    const syntheticFailures = events.filter(
+      (event) => event.type === "sub-run-failed" && event.error.detail?.["reason"] === "parent-aborted"
+    );
+
+    expect(syntheticFailures).toHaveLength(2);
+    expect(syntheticFailures.every((event) => event.error.code === "aborted")).toBe(true);
+    expect(events.find((event) => event.type === "aborted")).toMatchObject({
+      type: "aborted",
+      reason: "parent-aborted"
+    });
+  });
+
   it("propagates run() caller AbortSignal into the in-flight provider fetch", async () => {
     const abortController = new AbortController();
     const fetchProbe = createAbortableFetchProbe();
@@ -1186,6 +1221,72 @@ describe("BUDGET-02 sub-run timeout / deadline propagation", () => {
     expect("timeout").toBe("timeout");
   });
 });
+
+interface AbortableFanOutProvider extends ConfiguredModelProvider {
+  waitForStartedChildren(count: number): Promise<void>;
+}
+
+function createAbortableFanOutProvider(id: string): AbortableFanOutProvider {
+  let planIndex = 0;
+  const childSignals: AbortSignal[] = [];
+  const waiters: Array<{ readonly count: number; readonly resolve: () => void }> = [];
+  const notify = (): void => {
+    for (let index = waiters.length - 1; index >= 0; index -= 1) {
+      const waiter = waiters[index];
+      if (waiter && childSignals.length >= waiter.count) {
+        waiters.splice(index, 1);
+        waiter.resolve();
+      }
+    }
+  };
+
+  return {
+    id,
+    async generate(request: ModelRequest): Promise<ModelResponse> {
+      const phase = String(request.metadata.phase);
+      const protocol = String(request.metadata.protocol);
+      if (protocol === "coordinator" && phase === "plan") {
+        const text =
+          planIndex === 0
+            ? delegateBlock([
+              { protocol: "sequential", intent: "cancel child 0" },
+              { protocol: "sequential", intent: "cancel child 1" },
+              { protocol: "sequential", intent: "queued child 2" }
+            ])
+            : participateOutput;
+        planIndex += 1;
+        return { text, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+      }
+      if (protocol === "coordinator") {
+        return { text: "parent final", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+      }
+      if (!request.signal) {
+        throw new Error("child request missing abort signal");
+      }
+      childSignals.push(request.signal);
+      notify();
+      await waitForAbort(request.signal);
+      throw request.signal.reason;
+    },
+    waitForStartedChildren(count: number): Promise<void> {
+      if (childSignals.length >= count) {
+        return Promise.resolve();
+      }
+      return new Promise((resolve) => {
+        waiters.push({ count, resolve });
+      });
+    }
+  };
+}
+
+function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
+}
 
 interface AbortableFetchProbe {
   readonly receivedSignal: Promise<AbortSignal | undefined>;
