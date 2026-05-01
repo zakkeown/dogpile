@@ -549,16 +549,16 @@ Fields are in the order the implementation assembles them. `agents[]` is sorted 
 
 [A2 VERIFIED: src/types/events.ts BudgetStopEvent line 424: `readonly cost: CostSummary`]
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`terminationReason?` top-level field — collapse or keep?**
    - What we know: CONTEXT.md D-06 keeps it; D-06 notes the planner may collapse it
    - What's unclear: user preference
-   - Recommendation: Collapse. Remove `terminationReason?`. `outcome.terminationCode` carrying BudgetStopReason is sufficient for all machine consumers. If the user requires human strings, add a field in Phase 9+. This recommendation is strong enough to make it the default plan choice.
+   - RESOLVED: Collapse. Remove `terminationReason?`. `outcome.terminationCode` carrying BudgetStopReason is sufficient for all machine consumers. If the user requires human strings, add a field in Phase 9+. This recommendation is strong enough to make it the default plan choice.
 
 2. **type-check.ts JSON import approach**
    - What we know: This project's tsconfig uses `moduleResolution: "Bundler"`, `verbatimModuleSyntax: true`, and has no `resolveJsonModule` — bare JSON imports are not supported. The `assert { type: "json" }` syntax is also deprecated in TS 5.3+ (replaced by `with { type: "json" }`), and neither form works without `resolveJsonModule`.
-   - Resolution: Use an inline object that mirrors the fixture JSON with `satisfies AuditRecord` (see Pattern 5 and the updated Code Examples section). This is fully covered by `tsconfig.json`'s `"include": ["src/**/*.ts"]` with no additional config.
+   - RESOLVED: Use an inline object that mirrors the fixture JSON with `satisfies AuditRecord` (see Pattern 5 and the updated Code Examples section). This is fully covered by `tsconfig.json`'s `"include": ["src/**/*.ts"]` with no additional config.
 
 [VERIFIED: tsconfig.json — no `resolveJsonModule`, `verbatimModuleSyntax: true`, `moduleResolution: "Bundler"`]
 
