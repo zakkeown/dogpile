@@ -1,0 +1,417 @@
+{
+  "phase": "06-provenance-annotations",
+  "generated_at": "2026-05-01T00:00:00Z",
+  "stats": {
+    "total": 14,
+    "answered": 14,
+    "chat_more": 0,
+    "remaining": 0
+  },
+  "sections": [
+    {
+      "id": "model-id-concept",
+      "title": "modelId vs providerId",
+      "questions": [
+        {
+          "id": "Q-01",
+          "title": "Is modelId a distinct concept from providerId?",
+          "context": "ConfiguredModelProvider has only one `id` field, described as 'Stable provider id recorded in traces.' PROV-01 lists 'model id' and 'provider id' as separate provenance fields. Current ModelRequestEvent already has `providerId` from provider.id. The distinction matters: providerId could be 'openai-compatible' while modelId might be 'gpt-4o'.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Yes — modelId and providerId are different concepts",
+              "description": "provider.id = adapter identity (e.g., 'openai-compatible'); modelId = the specific model being called (e.g., 'gpt-4o'). Both should appear in provenance. Requires a source for modelId."
+            },
+            {
+              "id": "b",
+              "label": "No — provider.id serves as both",
+              "description": "Callers who want model-level granularity already encode it in provider.id (e.g., 'openai-compatible:gpt-4o'). No new field needed; PROV-01's 'model id' is satisfied by providerId."
+            },
+            {
+              "id": "c",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-02",
+          "title": "Where does modelId come from (if distinct)?",
+          "context": "ConfiguredModelProvider has no modelId field today. The internal Vercel AI adapter reads model.modelId from the Vercel AI LanguageModel object. ModelRequest.metadata is a JsonObject that can hold arbitrary keys. Adding modelId to the ConfiguredModelProvider interface would be a public API change.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Add optional modelId to ConfiguredModelProvider interface",
+              "description": "ConfiguredModelProvider gains `readonly modelId?: string`. Callers who want the field set it; it falls back to provider.id when absent. Public API addition. OpenAI-compatible adapter and all first-party code must be updated."
+            },
+            {
+              "id": "b",
+              "label": "Read from ModelRequest.metadata.modelId by convention",
+              "description": "No interface change. Protocols already populate ModelRequest.metadata. Callers set metadata.modelId in their tier/protocol config. Not type-safe but avoids public API surface change."
+            },
+            {
+              "id": "c",
+              "label": "Infer from provider during adapter creation (internal only)",
+              "description": "Adapters like openai-compatible already know the model name (passed as constructor arg). Provider stores modelId internally; exposed only in events, not on ConfiguredModelProvider itself. No caller change needed."
+            },
+            {
+              "id": "d",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-03",
+          "title": "Fallback when modelId is absent or not provided?",
+          "context": "If modelId is optional on ConfiguredModelProvider or inferred, some callers won't set it. Provenance fields need consistent behavior. Options affect how events are typed (required vs optional field) and how downstream tools (Phase 9 OTEL) consume them.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Fall back to providerId — modelId always present on events",
+              "description": "ModelRequestEvent.modelId is always non-optional; runtime substitutes providerId when modelId is unknown. Simple for consumers; hides the distinction when not configured."
+            },
+            {
+              "id": "b",
+              "label": "Field is optional on events — absent when not configured",
+              "description": "ModelRequestEvent.modelId?: string. Consumers check presence. Honest about what's known. Slightly more consumer burden."
+            },
+            {
+              "id": "c",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "id": "event-emission",
+      "title": "Event Emission Strategy",
+      "questions": [
+        {
+          "id": "Q-04",
+          "title": "Should model-request/response events actually be emitted during a run?",
+          "context": "Today, ModelRequestEvent and ModelResponseEvent are DEFINED in the type system (src/types/events.ts, in the RunEvent union) but NEVER emitted by the runtime. trace.providerCalls (ReplayTraceProviderCall) already captures callId, providerId, startedAt, completedAt, agentId, role, request, response. PROV-01 says callers read provenance 'on model-request and model-response events in a completed trace.'",
+          "options": [
+            {
+              "id": "a",
+              "label": "Yes — start emitting them as real runtime events",
+              "description": "model-request emitted before each provider call; model-response emitted after. They appear in trace.events and the streaming log. Satisfies PROV-01 literally. Behavioral change: existing callers see new event types they've never seen before. Requires updating event-schema.test.ts and result-contract.test.ts."
+            },
+            {
+              "id": "b",
+              "label": "No — provenance lives in trace.providerCalls only",
+              "description": "ReplayTraceProviderCall already has all required fields (startedAt, completedAt, callId, providerId). PROV-01 is met by enriching providerCalls with modelId. Events stay typed-but-silent (the current design). Simpler, no behavioral change."
+            },
+            {
+              "id": "c",
+              "label": "Hybrid — emit events but keep providerCalls as the canonical record",
+              "description": "Events are emitted (streaming visibility) but providerCalls remains the authoritative provenance store for replay. Events are derived from providerCalls data. Two sources of truth, kept in sync."
+            },
+            {
+              "id": "d",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-05",
+          "title": "Where in the event sequence do model-request/response appear?",
+          "context": "Current event sequence per turn: role-assignment → agent-turn (and model-output-chunk if streaming). If model-request/response are emitted, they need a position relative to agent-turn. agent-turn carries the completed response. model-request would naturally precede the provider call; model-response would follow it (before or after agent-turn is built).",
+          "options": [
+            {
+              "id": "a",
+              "label": "model-request before agent-turn, model-response immediately after provider call (before agent-turn)",
+              "description": "Sequence: role-assignment → model-request → [model-output-chunk*] → model-response → agent-turn. Granular visibility into the provider call. Two new events per turn."
+            },
+            {
+              "id": "b",
+              "label": "model-response only, after agent-turn (summary provenance)",
+              "description": "Keep model-request silent. Emit one model-response event after agent-turn as a provenance summary. Minimizes event count change. Sequence: role-assignment → [model-output-chunk*] → agent-turn → model-response."
+            },
+            {
+              "id": "c",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "id": "timestamp-shape",
+      "title": "Timestamp Shape on Events",
+      "questions": [
+        {
+          "id": "Q-06",
+          "title": "What timestamps appear on ModelRequestEvent?",
+          "context": "Every RunEvent currently has `at: string` (ISO-8601, event-emission timestamp). PROV-01 requires startedAt on model-request events. `startedAt` in model.ts captures `new Date().toISOString()` before the provider call. `at` in events is captured at emit-time (same moment for model-request). Two timestamps would be redundant if emitted immediately before the call.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Keep `at`, add `startedAt` as a distinct provenance field",
+              "description": "ModelRequestEvent gets both `at` (event emission) and `startedAt` (before provider call). When emitted right before the call, both are effectively the same value. Explicit and unambiguous for consumers who want the semantic distinction."
+            },
+            {
+              "id": "b",
+              "label": "`at` IS startedAt — no new field on ModelRequestEvent",
+              "description": "Emit model-request right before the provider call so `at` semantically equals startedAt. No field addition. Document the semantic: 'at on model-request = provider call start time.' Consumers use `at` for startedAt."
+            },
+            {
+              "id": "c",
+              "label": "Add `startedAt` and drop `at` on model-request/response only",
+              "description": "model-request and model-response events use `startedAt`/`completedAt` instead of the shared `at`. Breaking change in the event type but cleaner semantics. All other events keep `at`."
+            },
+            {
+              "id": "d",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "c",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-07",
+          "title": "What timestamps appear on ModelResponseEvent?",
+          "context": "PROV-01 requires both startedAt and completedAt on model-response events. completedAt = after the provider call returns. The current ModelResponseEvent has only `at`. The start time is captured by model.ts (before the provider call). To put startedAt on model-response, it must be threaded through from the call start.",
+          "options": [
+            {
+              "id": "a",
+              "label": "ModelResponseEvent gets both startedAt and completedAt (full pair)",
+              "description": "Consumers can compute call duration from a single event. `at` keeps its existing semantic (event emission time). startedAt = before provider call; completedAt = after. Three timestamps on the event total."
+            },
+            {
+              "id": "b",
+              "label": "ModelResponseEvent gets completedAt only (pair spans request+response events)",
+              "description": "startedAt lives on ModelRequestEvent, completedAt lives on ModelResponseEvent. Consumers correlate via callId. Cleaner per-event fields but requires joining two events for duration."
+            },
+            {
+              "id": "c",
+              "label": "`at` on ModelResponseEvent IS completedAt — no new field",
+              "description": "Emit model-response right after the provider call so `at` semantically equals completedAt. Document: 'at on model-response = provider call completion time.' No field addition."
+            },
+            {
+              "id": "d",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "id": "providerCalls-alignment",
+      "title": "Alignment with trace.providerCalls",
+      "questions": [
+        {
+          "id": "Q-08",
+          "title": "After Phase 6, what's the canonical provenance record?",
+          "context": "trace.providerCalls (ReplayTraceProviderCall) already has: callId, providerId, startedAt, completedAt, agentId, role, request, response. If model-request/response events are also emitted with provenance fields, there will be two sources of the same data in a completed RunResult. Consumers may read either.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Events are canonical — providerCalls becomes supplementary",
+              "description": "Events carry all provenance (modelId, providerId, callId, startedAt, completedAt). providerCalls retains request/response bodies for replay. Events are the primary interface for observability. Phase 9 (OTEL) and Phase 7 (introspection) query events."
+            },
+            {
+              "id": "b",
+              "label": "providerCalls stays canonical — events are a streaming view",
+              "description": "providerCalls is the authoritative provenance record. Events give streaming consumers visibility. Tooling that needs complete provenance reads trace.providerCalls. Phase 6 enriches providerCalls with modelId, not events."
+            },
+            {
+              "id": "c",
+              "label": "Both are canonical but serve different use-cases",
+              "description": "Events = streaming/real-time visibility and event-log queries (Phase 7 introspection). providerCalls = replay, full request/response bodies, audit. Each has its role; they're kept in sync by the runtime."
+            },
+            {
+              "id": "d",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "c",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-09",
+          "title": "Does Phase 6 add modelId to ReplayTraceProviderCall?",
+          "context": "ReplayTraceProviderCall (in trace.providerCalls) has: callId, providerId, startedAt, completedAt, agentId, role, request, response. PROV-01 says 'on model-request and model-response events' — it doesn't mention providerCalls. But if modelId is added to the provider interface, it's natural to record it in providerCalls too. AuditRecord (Phase 8) may reference providerCalls.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Yes — add modelId to ReplayTraceProviderCall",
+              "description": "modelId appears in both events and providerCalls. Consistent provenance everywhere. providerCalls is already the replay anchor; adding modelId there makes it complete. One more field on ReplayTraceProviderCall (public surface change — needs CHANGELOG entry)."
+            },
+            {
+              "id": "b",
+              "label": "No — modelId only on events",
+              "description": "providerCalls keeps its current shape. Events are where callers read modelId per PROV-01. Phase 8 (Audit) can pull it from events if needed. Minimal public surface change."
+            },
+            {
+              "id": "c",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "id": "public-surface",
+      "title": "Public Surface",
+      "questions": [
+        {
+          "id": "Q-10",
+          "title": "Does Phase 6 ship any provenance utility functions?",
+          "context": "PROV-01/PROV-02 require structural fields on events. No utility functions are specified. But later phases (Phase 7 introspection, Phase 9 OTEL) will query provenance fields. Adding typed helpers now (e.g., extractProvenance(event)) could simplify Phase 7/9, or it could be premature.",
+          "options": [
+            {
+              "id": "a",
+              "label": "No utilities — provenance is purely structural (fields on types)",
+              "description": "Phase 6 adds fields only. No helper functions. Phase 7 introspection defines its own query API. Minimal public surface change. Consistent with Phase 6's narrow scope (PROV-01, PROV-02 only)."
+            },
+            {
+              "id": "b",
+              "label": "Yes — ship a getProvenance() helper alongside the event types",
+              "description": "New function: `getProvenance(event: ModelRequestEvent | ModelResponseEvent): ProvenanceRecord`. Small and pure. Makes provenance extraction ergonomic for Phase 9 span-builder. Adds a new export (check package.json exports)."
+            },
+            {
+              "id": "c",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "b",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-11",
+          "title": "Does Phase 6 add a new subpath export?",
+          "context": "Current subpath exports: /runtime/*, /types, /browser, /providers/openai-compatible, /runtime/logger, /runtime/retry. Adding a new subpath requires updating package.json exports, package.json files allowlist, src/tests/package-exports.test.ts, and CHANGELOG.md. Phase 6 could ship provenance fields as part of /types (no new subpath) or as a new /runtime/provenance.",
+          "options": [
+            {
+              "id": "a",
+              "label": "No new subpath — all additions live in existing exports",
+              "description": "ModelRequestEvent/ModelResponseEvent fields extend types already in /types. If any runtime utility is added, it goes in an existing /runtime/* path. Clean, no packaging work."
+            },
+            {
+              "id": "b",
+              "label": "New /runtime/provenance subpath",
+              "description": "Phase 6 ships a dedicated provenance module: utility functions, the ProvenanceRecord type, and any helpers for extracting provenance from events. Isolated surface; future phases import from it."
+            },
+            {
+              "id": "c",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "b",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-12",
+          "title": "Should Phase 6 add a frozen fixture test for the provenance event shape?",
+          "context": "Phase 8 (Audit) has AUDT-02: a frozen JSON fixture that enforces AuditRecord schema stability. PROV-01 event shape changes are also breaking. A frozen fixture for ModelRequestEvent and ModelResponseEvent would enforce stability — any field addition or rename forces an explicit fixture update. But it adds test-maintenance overhead.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Yes — frozen fixture for provenance event shape",
+              "description": "Add src/tests/fixtures/provenance-event-v1.json. The event-schema.test.ts already validates all event shapes; this adds a snapshot-level freeze. Future shape changes require explicit fixture update. Strong protection for downstream consumers."
+            },
+            {
+              "id": "b",
+              "label": "No — event-schema.test.ts coverage is sufficient",
+              "description": "The existing event-schema.test.ts validates ModelRequestEvent and ModelResponseEvent types structurally. No frozen fixture needed. Shape changes break event-schema.test.ts, which is enough gate."
+            },
+            {
+              "id": "c",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-13",
+          "title": "How should provenance fields be populated during replay()?",
+          "context": "PROV-02: provenance fields survive replay(). Currently replay() re-emits events from trace.events. If model-request/response events are emitted and stored in trace.events, they already survive replay with no extra work (events are persisted). If provenance lives only in providerCalls, replay must re-surface it separately.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Events stored in trace.events — replay is automatic (no extra work)",
+              "description": "model-request/response events with provenance fields are pushed into events[]. On replay(), engine replays trace.events as-is. Provenance fields come back unchanged. PROV-02 is satisfied by the existing replay contract."
+            },
+            {
+              "id": "b",
+              "label": "Provenance re-derived from trace.providerCalls during replay",
+              "description": "providerCalls is the source of truth. On replay, the engine synthesizes model-request/response events from providerCalls (matching by callId). Slightly more complex replay logic but keeps providerCalls canonical."
+            },
+            {
+              "id": "c",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "b",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-14",
+          "title": "What's the scope of the event-shape change for existing consumers?",
+          "context": "If model-request/response events start being emitted, switch statements over RunEvent in existing consumer code will suddenly hit these cases. src/tests/fixtures/consumer-type-resolution-smoke.ts already handles both cases (lines 105-106). The CLAUDE.md public-surface chain: event-schema.test.ts, result-contract.test.ts, package-exports.test.ts, CHANGELOG.md.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Treat as additive — no action beyond existing switch coverage",
+              "description": "consumer-type-resolution-smoke.ts already handles model-request/model-response. The event types are already in the RunEvent union. Starting to emit them is additive, not breaking. Note it in CHANGELOG as a behavioral addition."
+            },
+            {
+              "id": "b",
+              "label": "Treat as a potentially breaking change — flag in CHANGELOG with migration note",
+              "description": "Callers who exhaustively switch on event.type without a default case may break. Add a migration note in CHANGELOG v0.5.0 entry: 'model-request and model-response events are now emitted; update exhaustive switches.' Matches how v0.4.0 handled sub-run-* events."
+            },
+            {
+              "id": "c",
+              "label": "Custom",
+              "description": ""
+            }
+          ],
+          "answer": "b",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    }
+  ]
+}
