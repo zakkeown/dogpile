@@ -121,21 +121,92 @@ describe("parseAgentDecision", () => {
     expect(error.message.toLowerCase()).toContain("json");
   });
 
-  it("throws invalid-configuration with detail.path 'decision' for a top-level array (reserved for Phase 3)", () => {
+  it("returns an array of delegate decisions for a fenced delegate JSON array", () => {
+    const decision = parseAgentDecision(
+      [
+        "delegate:",
+        "```json",
+        JSON.stringify([
+          { protocol: "sequential", intent: "Investigate the regression." },
+          { protocol: "broadcast", intent: "Gather estimates." },
+          { protocol: "shared", intent: "Draft the fix." }
+        ]),
+        "```"
+      ].join("\n")
+    );
+
+    expect(decision).toEqual([
+      { type: "delegate", protocol: "sequential", intent: "Investigate the regression." },
+      { type: "delegate", protocol: "broadcast", intent: "Gather estimates." },
+      { type: "delegate", protocol: "shared", intent: "Draft the fix." }
+    ]);
+  });
+
+  it("throws invalid-configuration with detail.path 'decision' for an empty delegate array", () => {
     const error = expectInvalidConfiguration(
       () =>
         parseAgentDecision(
           [
             "delegate:",
             "```json",
-            JSON.stringify([{ protocol: "sequential", intent: "go" }]),
+            JSON.stringify([]),
             "```"
           ].join("\n")
         ),
       "decision"
     );
-    expect(error.message).toMatch(/single delegate object/i);
-    expect(error.message).toMatch(/Phase 3/i);
+    expect(error.message).toMatch(/must not be empty/i);
+  });
+
+  it("throws using single-delegate validation for an invalid item in a delegate array", () => {
+    expectInvalidConfiguration(
+      () =>
+        parseAgentDecision(
+          [
+            "delegate:",
+            "```json",
+            JSON.stringify([
+              { protocol: "sequential", intent: "Investigate." },
+              { protocol: "swarm", intent: "Invalid protocol." }
+            ]),
+            "```"
+          ].join("\n")
+        ),
+      "decision.protocol"
+    );
+  });
+
+  it("accepts positive integer maxConcurrentChildren on delegate decisions", () => {
+    const decision = parseAgentDecision(
+      [
+        "delegate:",
+        "```json",
+        JSON.stringify({ protocol: "sequential", intent: "Run bounded.", maxConcurrentChildren: 2 }),
+        "```"
+      ].join("\n")
+    );
+
+    expect(decision).toEqual({
+      type: "delegate",
+      protocol: "sequential",
+      intent: "Run bounded.",
+      maxConcurrentChildren: 2
+    });
+  });
+
+  it("rejects non-positive maxConcurrentChildren on delegate decisions", () => {
+    expectInvalidConfiguration(
+      () =>
+        parseAgentDecision(
+          [
+            "delegate:",
+            "```json",
+            JSON.stringify({ protocol: "sequential", intent: "Run bounded.", maxConcurrentChildren: 0 }),
+            "```"
+          ].join("\n")
+        ),
+      "decision.maxConcurrentChildren"
+    );
   });
 
   it("throws invalid-configuration with detail.path 'decision.model' when model id does not match parent provider", () => {

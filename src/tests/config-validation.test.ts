@@ -126,6 +126,21 @@ const invalidDogpileOptionCases = [
     path: "signal"
   },
   {
+    name: "maxConcurrentChildren zero",
+    options: optionsWith({ maxConcurrentChildren: 0 }),
+    path: "maxConcurrentChildren"
+  },
+  {
+    name: "maxConcurrentChildren negative",
+    options: optionsWith({ maxConcurrentChildren: -1 }),
+    path: "maxConcurrentChildren"
+  },
+  {
+    name: "maxConcurrentChildren non-integer",
+    options: optionsWith({ maxConcurrentChildren: 1.5 }),
+    path: "maxConcurrentChildren"
+  },
+  {
     name: "non-finite seed",
     options: optionsWith({ seed: Number.NaN }),
     path: "seed"
@@ -778,6 +793,66 @@ describe("maxDepth option", () => {
   });
 });
 
+describe("maxConcurrentChildren option", () => {
+  it("rejects zero maxConcurrentChildren on createEngine with invalid-configuration at path maxConcurrentChildren", () => {
+    expectInvalidConfiguration(
+      () =>
+        createEngine({
+          ...validEngineOptions(),
+          maxConcurrentChildren: 0
+        }),
+      "maxConcurrentChildren"
+    );
+  });
+
+  it("rejects negative maxConcurrentChildren on createEngine", () => {
+    expectInvalidConfiguration(
+      () =>
+        createEngine({
+          ...validEngineOptions(),
+          maxConcurrentChildren: -1
+        }),
+      "maxConcurrentChildren"
+    );
+  });
+
+  it("rejects non-integer maxConcurrentChildren on createEngine", () => {
+    expectInvalidConfiguration(
+      () =>
+        createEngine({
+          ...validEngineOptions(),
+          maxConcurrentChildren: 1.5
+        }),
+      "maxConcurrentChildren"
+    );
+  });
+
+  it("rejects per-run maxConcurrentChildren that raises the engine ceiling", async () => {
+    const engine = createEngine({
+      ...validEngineOptions(),
+      protocol: { kind: "sequential", maxTurns: 1 },
+      maxConcurrentChildren: 2
+    });
+
+    await expect(engine.run("Validate bounded children.", { maxConcurrentChildren: 5 })).rejects.toMatchObject({
+      code: "invalid-configuration",
+      detail: { path: "maxConcurrentChildren" }
+    });
+  });
+
+  it("accepts per-run maxConcurrentChildren that lowers the engine ceiling", async () => {
+    const engine = createEngine({
+      ...validEngineOptions(),
+      protocol: { kind: "sequential", maxTurns: 1 },
+      maxConcurrentChildren: 4
+    });
+
+    await expect(engine.run("Validate bounded children.", { maxConcurrentChildren: 2 })).resolves.toMatchObject({
+      output: expect.any(String)
+    });
+  });
+});
+
 describe("BUDGET-02 defaultSubRunTimeoutMs validation + public-surface lock", () => {
   it.each([
     { name: "negative", value: -1 },
@@ -885,6 +960,15 @@ function optionsWith(overrides: Record<string, unknown>): DogpileOptions {
     ...validDogpileOptions,
     ...overrides
   } as unknown as DogpileOptions;
+}
+
+function validEngineOptions(): EngineOptions {
+  return {
+    protocol: { kind: "sequential", maxTurns: 1 },
+    tier: "fast",
+    model: validModelProvider,
+    agents: [{ id: "validator", role: "tester" }]
+  };
 }
 
 function runtimeToolWith(overrides: Record<string, unknown>): RuntimeTool<JsonObject, JsonValue> {
