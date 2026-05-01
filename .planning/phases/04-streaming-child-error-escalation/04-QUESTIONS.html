@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Phase 4: Streaming &amp; Child Error Escalation — Discussion Questions</title>
+<style>
+  :root {
+    --bg: #f8fafc;
+    --fg: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --green: #22c55e;
+    --green-bg: #f0fdf4;
+    --orange: #f97316;
+    --orange-bg: #fff7ed;
+    --blue: #2563eb;
+    --card-bg: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    margin: 0;
+    padding: 24px;
+    line-height: 1.45;
+  }
+  header { max-width: 1400px; margin: 0 auto 24px; }
+  h1 { margin: 0 0 8px; font-size: 22px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+  .stats {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+  .stats .num { font-weight: 700; }
+  .progress {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--green);
+    transition: width 0.2s;
+  }
+  .actions { display: flex; gap: 8px; margin: 12px 0 0; }
+  button {
+    background: var(--blue);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.secondary { background: var(--card-bg); color: var(--fg); border: 1px solid var(--border); }
+  main { max-width: 1400px; margin: 0 auto; }
+  section.topic {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 0 0 16px;
+    overflow: hidden;
+  }
+  .topic-header {
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f1f5f9;
+    border-bottom: 1px solid var(--border);
+  }
+  .topic-header h2 { margin: 0; font-size: 16px; }
+  .topic-header .count { color: var(--muted); font-size: 13px; }
+  .topic-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 12px;
+    padding: 16px;
+  }
+  .topic.collapsed .topic-body { display: none; }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    background: var(--card-bg);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .card.answered { border: 2px solid var(--green); background: var(--green-bg); padding: 13px; }
+  .card .qid {
+    display: inline-block;
+    background: var(--fg);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-right: 8px;
+    letter-spacing: 0.5px;
+  }
+  .card.answered .qid { background: var(--green); }
+  .card h3 { display: inline; font-size: 14px; font-weight: 600; margin: 0; }
+  .card .ctx {
+    color: var(--muted);
+    font-size: 12px;
+    font-style: italic;
+    margin: 8px 0;
+    line-height: 1.4;
+  }
+  .options { margin: 8px 0; }
+  .option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 13px;
+  }
+  .option input[type="radio"] { margin-top: 4px; flex-shrink: 0; }
+  .option label { cursor: pointer; flex: 1; }
+  .option .opt-label { font-weight: 600; }
+  .option .opt-desc { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; }
+  textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 40px;
+    margin-top: 8px;
+  }
+  textarea.has-content { border: 2px solid var(--orange); background: var(--orange-bg); padding: 5px 7px; }
+  .hint {
+    background: #eff6ff;
+    border-left: 3px solid var(--blue);
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #1e40af;
+    margin: 12px 0;
+    border-radius: 4px;
+  }
+  .hint code { background: white; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Phase 4: Streaming &amp; Child Error Escalation — Discussion Questions</h1>
+  <p class="sub">17 questions across 6 topics. Answer at your own pace.</p>
+  <div class="stats">
+    <div><span class="num" id="stat-total">17</span> total</div>
+    <div><span class="num" id="stat-answered">0</span> answered</div>
+    <div><span class="num" id="stat-remaining">17</span> remaining</div>
+    <div class="progress"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div id="stat-pct">0%</div>
+  </div>
+  <div class="actions">
+    <button onclick="saveAnswers()">Save answers</button>
+    <button class="secondary" onclick="downloadJson()">Download JSON</button>
+  </div>
+  <div class="hint">
+    After answering, click <b>Save answers</b> (or download the JSON and replace
+    <code>04-QUESTIONS.json</code>). Then return to Claude and say <b>"refresh"</b> to update,
+    or <b>"finalize"</b> to generate <code>04-CONTEXT.md</code>.
+  </div>
+</header>
+<main id="root"></main>
+
+<script>
+const STATE = {
+  path: ".planning/phases/04-streaming-child-error-escalation/04-QUESTIONS.json",
+  data: null,
+  fileHandle: null
+};
+
+const QUESTIONS_JSON = `{"phase": "04-streaming-child-error-escalation", "generated_at": "2026-05-01T13:15:00Z", "stats": {"total": 17, "answered": 0, "chat_more": 0, "remaining": 17}, "sections": [{"id": "stream-wrapping", "title": "Stream Wrapping Shape (STREAM-01 / STREAM-02)", "questions": [{"id": "Q-01", "title": "How are child events wrapped on the parent stream?", "context": "Today coordinator.ts:1118 \`teedEmit\` forwards each child engine event to the parent stream verbatim \\u2014 the event's \`runId\` is the CHILD's id. STREAM-01 says child events must be 'wrapped with \`parentRunId\` and the child's \`runId\`, so consumers can demultiplex.' The wrapping shape is the single biggest public-surface decision in this phase. Phase 1 D-04 added \`sub-run-*\` markers; child INNER events (model-activity, tool-activity, turn) currently bleed through as-is.", "options": [{"id": "a", "label": "Add optional \`parentRunId?: string\` to every event type that can flow through a parent stream", "description": "Lightweight, additive. When a child event is forwarded by \`teedEmit\`, set \`parentRunId = parent.runId\` before re-emitting. Consumers demux via \`event.parentRunId === handle.runId ? own : child\`. Pros: no envelope, existing event consumers unchanged, replay path trivially preserves the field. Cons: every event type gains an optional field (subtle public-surface bloat); grandchildren need a chain (see Q-02)."}, {"id": "b", "label": "Wrap child events in a new envelope: \`{ type: 'sub-run-event', parentRunId, childRunId, event: <original> }\`", "description": "Explicit envelope makes the demux trivial \\u2014 type-discriminated. Pros: zero changes to inner event shapes, easy to filter, clean recursion (envelopes nest). Cons: BIG breaking change for existing stream consumers iterating events directly (they now see envelopes, not raw events); replay parity gets harder (trace stores raw events, stream sees envelopes); doubles the surface."}, {"id": "c", "label": "Add \`parentRunIds?: readonly string[]\` chain on every event (root \\u2192 ... \\u2192 immediate parent)", "description": "Like (a) but generalized for grandchildren. Empty/absent at root; \`[parent]\` at depth 1; \`[grandparent, parent]\` at depth N. Demux at any level via \`event.parentRunIds?.[0] === handle.runId\`. Pros: handles arbitrary nesting elegantly. Cons: every event gains a list field, slight serialization overhead, slightly more work for consumers vs flat parentRunId."}, {"id": "d", "label": "Don't re-emit child events on parent stream \\u2014 only the \`sub-run-*\` lifecycle markers; expose a \`streamChild(childRunId)\` API for opt-in subscription", "description": "Most surgical: parent stream stays small (just lifecycle), opt-in for inner detail. Pros: no event-shape changes, no envelope, consumers who don't care pay nothing. Cons: violates STREAM-01 wording ('emits each child event'); requires designing+exposing a new subscription API; harder to render a single timeline UI; breaks current \`teedEmit\` behavior callers may already depend on."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-02", "title": "How deep does the wrapping go for grandchildren and beyond?", "context": "A coordinator at depth 0 delegates to a coordinator at depth 1 which delegates again to depth 2. The grandchild's events bubble up through depth-1's \`teedEmit\` to depth-0's stream. The wrapping needs a story for arbitrary depth (Phase 1 D-13 default \`maxDepth=4\`).", "options": [{"id": "a", "label": "Always overwrite \`parentRunId\` to the IMMEDIATE parent \\u2014 root stream sees only the top-level child id", "description": "Loses ancestry; consumer at root can demux by depth-1 child but can't distinguish depth-2 grandchildren of one child. Simplest implementation."}, {"id": "b", "label": "Build a \`parentRunIds\` chain (root \\u2192 ... \\u2192 immediate parent), each level prepends its runId", "description": "Full ancestry preserved. Root consumer can group by chain[0] (top-level child) or full chain (specific grandchild). Aligns with Q-01=c if chosen; if Q-01=a, this means upgrading \`parentRunId\` to a chain anyway."}, {"id": "c", "label": "Wrap envelopes recursively: \`{ envelope, event: { envelope, event: <inner> } }\`", "description": "Self-similar; each level wraps the lower level's envelope. Aligns with Q-01=b. Easy to walk recursively but adds nesting depth to every grandchild event."}, {"id": "d", "label": "Only depth-1 children bubble events to parent; depth-2+ events stay in their immediate parent's trace (no further bubbling)", "description": "Bounded blast radius \\u2014 root never sees grandchild noise. Replay-parity friendly (traces are already nested). Cons: contradicts the 'live consumers see child events' UX goal."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-03", "title": "Per-child event-order preservation \\u2014 is the existing \`teedEmit\` synchronous push enough?", "context": "STREAM-02 mandates within-child order preservation, cross-child order unspecified. Current \`teedEmit\` (coordinator.ts:1118) pushes synchronously: \`childEvents.push(event); options.emit?.(event)\`. Multiple children dispatched in parallel via Phase 3's semaphore each have their own teedEmit closure. The parent stream's \`publish()\` (engine.ts:316) drains a single FIFO queue, so emissions are serialized at the parent level.", "options": [{"id": "a", "label": "Existing synchronous teedEmit is sufficient \\u2014 add a contract test asserting per-child order, no code changes to the emit path", "description": "JavaScript is single-threaded; sequential \`await runProtocol(...)\` per child guarantees in-child ordering. The parent stream's serial publisher means cross-child ordering is wall-clock interleave but per-child stays monotonic. Cheapest path."}, {"id": "b", "label": "Add an explicit per-child sequence number on bubbled events (\`childSeq: number\`), so consumers can verify/reorder", "description": "Belt-and-suspenders: even if a future refactor batches events, consumers can re-sort. Adds a public-surface field to every bubbled event. Slight overhead per event."}, {"id": "c", "label": "Refactor teedEmit to use a per-child queue drained by a single per-parent flush loop, formalize the ordering invariant", "description": "Introduces explicit machinery; makes the ordering invariant visible in code. Heavier change, possible perf trade. Probably overkill given (a)'s correctness."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-04", "title": "Does the wrapped event also land in the parent's RunResult.events trace?", "context": "Today child events are NOT in the parent's \`events\` array \\u2014 they live in \`subRun.subResult.events\`. The replay contract walks the embedded subResult. If we add \`parentRunId\` (Q-01=a) or wrap envelopes (Q-01=b) for the LIVE stream, the question is whether the parent's persisted \`events\` array gains those entries too. Phase 2 D-15 enforced parent-events isolation via budget-first-stop.test.ts.", "options": [{"id": "a", "label": "Stream-only wrapping; parent's persisted \`events\` array is unchanged (child events stay in \`subResult.events\` only)", "description": "Preserves Phase 2 D-15's parent-events isolation invariant. Replay walks subResults as today. Live stream consumers see the wrapped events; persisted-trace consumers walk the recursive structure. CLEAN separation between live UX and replay shape."}, {"id": "b", "label": "Wrapped child events ALSO land in parent's \`events\` array (flattened bubbling)", "description": "Single timeline view for replay. Breaks D-15 isolation \\u2014 termination math (Phase 2 D-15/16/17) needs explicit filtering by \`parentRunId === self\`. Replay round-trip gets weird (events appear in two places: parent's flat list AND child's nested subResult)."}, {"id": "c", "label": "Add a separate \`RunResult.streamLog?: readonly StreamEvent[]\` field that mirrors what the live stream emitted", "description": "Doesn't pollute \`events\`; gives replay-from-stream a recoverable timeline. Significant new field on RunResult, doubles persistence cost. Probably overkill."}], "answer": null, "chat_more": "", "status": "unanswered"}]}, {"id": "cancel-propagation", "title": "Cancellation Propagation (STREAM-03)", "questions": [{"id": "Q-05", "title": "Does \`StreamHandle.cancel()\` reuse the existing parent AbortController path, or add a stream-specific tear-down?", "context": "Phase 2 D-07 already wires per-child AbortControllers that forward parent.signal abort to every in-flight child engine (coordinator.ts:1163-1178). engine.ts:293 already produces \`createStreamCancellationError\` on parent abort. STREAM-03 spec: 'StreamHandle.cancel() on the parent aborts every in-flight child stream and the parent stream itself with DogpileError({ code: aborted }).'", "options": [{"id": "a", "label": "Reuse \\u2014 \`StreamHandle.cancel()\` aborts the parent's signal; existing Phase 2 propagation handles every child engine; parent stream emits a final error event then closes", "description": "Most surgical. Phase 2 already shipped the per-child controller pattern specifically as 'lays groundwork for Phase 4 streaming.' Just verify the path end-to-end and add the streaming-side contract test in \`streaming-api.test.ts\`. Phase 3 D-17's commented hook is the attach point."}, {"id": "b", "label": "Add a separate \`streamHandles: Set<StreamHandle>\` on the per-child runtime context; cancel() walks and explicitly tears down each", "description": "Explicit ownership of stream handles. Useful if children expose their own StreamHandle (which today they don't \\u2014 they're internal \`runProtocol\` calls). Heavier; only needed if Q-08 introduces caller-visible per-child handles."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-06", "title": "When the parent stream cancels, what's the LAST event the consumer sees?", "context": "engine.ts:293-297 currently emits a \`StreamErrorEvent\` then \`closeStream()\`. Subscribers must observe a terminal event. With children involved, there could be in-flight \`sub-run-*\` events that haven't drained.", "options": [{"id": "a", "label": "Single terminal \`error\` event with \`code: aborted\`, \`detail.reason: parent-aborted\` (or \`timeout\`); in-flight child events MAY arrive before it but never after", "description": "Matches existing behavior. Consumers know \`error\` = stream closed. In-flight child engines that haven't observed the abort yet may still emit a few events before they shut down \\u2014 per-child controllers will rapid-fire abort. Pragmatic and already mostly true."}, {"id": "b", "label": "Synthetic \`sub-run-failed\` for every in-flight child (with \`detail.reason: parent-aborted\`), then the parent \`error\` event", "description": "Trace-completeness: every started child gets an explicit terminator before the parent error. Aligns with Phase 3 D-09's 'sibling-failed' synthetic event pattern. More events to manage but better replay parity."}, {"id": "c", "label": "Single terminal \`error\` event AND ensure no further \`sub-run-*\` events are emitted after cancel() returns", "description": "Strictest contract: hard-stop emission immediately on cancel. Implementation: gate \`publish()\` on a \`closing\` flag set synchronously by cancel(). May drop in-flight child events that arrive in the same microtask."}], "answer": null, "chat_more": "", "status": "unanswered"}]}, {"id": "error-coordinator-context", "title": "Child Error Surfacing into Coordinator Decision (ERROR-01)", "questions": [{"id": "Q-07", "title": "How does the failed child appear in the coordinator's NEXT decision context?", "context": "Today coordinator.ts:459 appends a synthetic transcript line: \`[sub-run X failed]: <error.message>\`. ERROR-01 spec: 'A child failure surfaces as a \`sub-run-failed\` event in the coordinator's next decision context; the coordinator agent can retry, delegate differently, or terminate.' The decision context = the prompt fed to the coordinator agent for its next plan-turn.", "options": [{"id": "a", "label": "Keep the current taggedText synthetic transcript line \\u2014 but enrich with structured fields (error code, partialCost, attempt#)", "description": "Minimal change. The coordinator agent reads the failure as text in the same transcript stream as successes. Predictable; replay-stable; fits Phase 1 D-18's transcript-entry pattern. Enrichment: include \`error.code\`, \`error.detail.reason\`, \`partialCost.usd\` so the agent has actionable data."}, {"id": "b", "label": "Add a structured \`failures: ReadonlyArray<{childRunId, error, intent, partialCost}>\` block in the coordinator prompt, separate from transcript", "description": "Explicit machine-readable failure roster in the prompt. Easier for the agent to enumerate. Requires changing the coordinator prompt template \\u2014 public-ish surface (defines what the LLM sees). Risk: prompt drift across versions affects determinism."}, {"id": "c", "label": "Both \\u2014 taggedText line for human-readable transcript continuity AND a structured failures section the planner formats before the model call", "description": "Belt-and-suspenders. Prompt grows but agent gets max signal. Planner judgment on prompt template. Higher token cost per failure."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-08", "title": "Should the coordinator agent be able to query the child's PARTIAL trace (not just the error message)?", "context": "\`SubRunFailedEvent\` already carries \`partialTrace\` (Phase 2 D-09) \\u2014 the events the child emitted before dying. Today this is for replay/observability, not exposed to the coordinator agent. ERROR-01 lets the agent 'retry, delegate differently' \\u2014 it might want to see WHERE the child failed.", "options": [{"id": "a", "label": "No \\u2014 coordinator sees only \`error.message\`, \`error.code\`, \`partialCost\`; partialTrace is for the developer/replay only", "description": "Cheaper prompts. Coordinator decisions stay high-level (retry vs different intent vs terminate) without LLM weighing trace internals. Avoids token blow-up on failure-heavy runs."}, {"id": "b", "label": "Yes \\u2014 surface a compact summary of partialTrace (e.g., last 3 events, truncated) in the failures block", "description": "More informed retries (e.g., 'child failed mid-tool-call after 2 successful turns'). Token cost per failure increases. Requires designing the summarization (deterministic for replay)."}, {"id": "c", "label": "Defer \\u2014 Phase 4 ships error.message + code + reason only; partialTrace surfacing is a Phase 5+ enhancement if requested", "description": "YAGNI posture. Phase 4 stays focused on the spec wording (sub-run-failed in decision context). Easy follow-up if real users request it."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-09", "title": "After surfacing the failure, what's the dispatch loop's default behavior?", "context": "Coordinator.ts re-issues the plan turn after sub-run results. With a failure surfaced, the agent might respond with: (1) another delegate (retry/different), (2) participate (final synthesis), (3) nothing \\u2014 i.e., the coordinator emits no decision. Need to decide what 'nothing' means.", "options": [{"id": "a", "label": "Always re-issue plan turn after a failure; agent decides retry/different/terminate via decision (or \`participate\` for final answer)", "description": "Spec wording. Coordinator drives. If termination policy fires before the agent gets to respond, ERROR-02 kicks in (see Q-10). Pure agent-in-the-loop."}, {"id": "b", "label": "Add a runtime config \`onChildFailure?: 'continue' | 'abort'\` (default 'continue') \\u2014 'abort' skips re-issuing the plan turn and triggers ERROR-02 immediately", "description": "Caller-side escape hatch for fail-fast posture. Useful for batch jobs where one failure means abort. Public-surface addition. Default preserves spec behavior."}, {"id": "c", "label": "Always re-issue, but the agent's DecisionContext gets a hint flag \`hasUnhandledFailure: true\` so the prompt can include retry guidance", "description": "Implicit nudge to the agent. Spec-compliant. Slight prompt change. Test surface for the hint flag."}], "answer": null, "chat_more": "", "status": "unanswered"}]}, {"id": "error-unhandled-throw", "title": "Unhandled Failure Throw (ERROR-02)", "questions": [{"id": "Q-10", "title": "What counts as 'unhandled child failure' that triggers the parent throw?", "context": "ROADMAP success #4: 'If the parent terminates without final synthesis after an unhandled child failure, the parent throws the child's original DogpileError unwrapped.' Need to define the trigger condition precisely.", "options": [{"id": "a", "label": "Parent run ends without a \`final\` event AND its events array contains at least one \`sub-run-failed\` \\u2192 throw the FIRST failure's error", "description": "Simple invariant. 'Final synthesis' = the coordinator emitted a \`final\` event. Anything that ends the run before that (budget, termination floor, depth overflow) and has a failure in trace \\u2192 re-throw. First failure preserves causal order."}, {"id": "b", "label": "Same condition, but throw the LAST \`sub-run-failed\`'s error (most recent failure)", "description": "Last-wins semantics. The most recent failure is closest to the termination decision; arguably more relevant for debugging. Inconsistent with 'original' wording ('throws the child's original DogpileError')."}, {"id": "c", "label": "Track an explicit \`acknowledged: boolean\` per failure \\u2014 set when the coordinator's next decision references the failed childRunId; throw the first UN-acknowledged failure on terminate", "description": "Most precise: only failures the agent never had a chance to handle (or chose to ignore) escalate. Heavier \\u2014 needs acknowledgement tracking. Risk: ill-defined for free-text agent responses ('reference the childRunId' is fuzzy). Avoid unless needed."}, {"id": "d", "label": "Throw an aggregate error wrapping ALL un-handled child failures (\`code: aborted\`, \`detail.failures: [...]\`)", "description": "Multi-failure visibility. Violates 'original DogpileError unwrapped' spec wording. Useful for batch fan-outs but contradicts the requirement. Reject."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-11", "title": "What does 'unwrapped' mean in practice when re-throwing the child's error?", "context": "Spec: 'throws the child's original DogpileError unwrapped (same code, providerId, detail).' The child's DogpileError is captured in \`errorPayloadFromUnknown\` (coordinator.ts:1244) and stored in \`sub-run-failed.error\`. We need to preserve identity vs reconstruct.", "options": [{"id": "a", "label": "Hold a reference to the original \`Error\` instance in a Map keyed by childRunId; re-throw \`instanceof DogpileError\` verbatim on parent terminate", "description": "Strictest 'unwrapped': SAME object, .stack preserved, instance equality holds. Memory cost: hold error refs through the parent run's lifetime. Cleanest UX for catch blocks doing \`instanceof\`."}, {"id": "b", "label": "Reconstruct a new DogpileError from \`sub-run-failed.error\` payload (code, providerId, detail) \\u2014 same fields, different instance", "description": "JSON-faithful. Replay produces an identical re-throw (replay only has the serialized payload). Loses .stack. instanceof DogpileError still true. Matches 'same code, providerId, detail' spec wording literally."}, {"id": "c", "label": "Hold reference at runtime (a) AND fall back to reconstruction (b) during replay", "description": "Best of both \\u2014 runtime gets identity, replay still works. Two code paths, slightly more complex but small. Probably the right answer if (a)'s memory cost is acceptable."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-12", "title": "Which terminations count as 'parent terminates without final synthesis'?", "context": "Termination paths today: (1) coordinator emits \`final\` (success), (2) budget timeout (\`maxIterations\`/\`maxRounds\`/\`maxCost\`/\`timeoutMs\`), (3) explicit cancellation (parent.signal.abort()), (4) depth overflow at dispatch, (5) coordinator emits no decision (degenerate plan-turn). All except (1) are 'no final synthesis.'", "options": [{"id": "a", "label": "Every termination except (1) re-throws an unhandled child failure if one exists", "description": "Broadest coverage. Cancellation while a child failure is unacknowledged \\u2192 throw the child's error not the cancel error. Risk: cancel-after-failure gets the failure error, masking the cancel intent. Could be confusing."}, {"id": "b", "label": "Only budget-driven and degenerate-plan-turn terminations re-throw; explicit cancellation throws the cancel error verbatim", "description": "Cancel intent always wins. User who called \`.cancel()\` gets the abort error, not a child failure. Aligns with principle of least surprise for cancel callers. Safer default."}, {"id": "c", "label": "Only degenerate plan-turn (coordinator emitted no decision while a failure exists) \\u2014 narrow definition", "description": "Most conservative. Budget terminations get the budget error (Phase 2 D-15 territory); cancels get cancel errors. Only the 'agent gave up silently' path escalates. Aligns with 'unhandled' as 'agent didn't address it.'"}], "answer": null, "chat_more": "", "status": "unanswered"}]}, {"id": "timeout-discrimination", "title": "Timeout Discrimination (ERROR-03)", "questions": [{"id": "Q-13", "title": "What sources today produce \`code: provider-timeout\` at the child level?", "context": "ROADMAP success #5: 'Child timeouts surface as \`provider-timeout\` at the child level; parent-level timeouts surface as \`aborted\` with \`detail.reason: timeout\`.' Phase 2 D-08/D-13 already lock parent-side \`aborted\` + \`detail.reason: timeout\`. The child side: a child's OWN deadline (decision-supplied or inherited via Phase 2 D-11/12) expiring \\u2192 ?", "options": [{"id": "a", "label": "Child engine's OWN budget.timeoutMs firing \\u2192 \`code: provider-timeout\` (re-classify the abort path inside the child)", "description": "Cleanest model: a child whose own budget expires self-classifies as \`provider-timeout\` (the child's perspective). Only the PARENT's budget propagating down (Phase 2 D-11 deadline math) keeps the \`aborted+timeout\` shape. Requires distinguishing 'my own deadline' vs 'inherited deadline.'"}, {"id": "b", "label": "Provider call timeouts (the underlying HTTP/SDK timeout) \\u2192 \`code: provider-timeout\`; ALL Dogpile-level deadlines \\u2192 \`code: aborted, reason: timeout\`", "description": "Strict layering: \`provider-timeout\` is reserved for actual provider-call timeouts (already a thing in error vocabulary). Engine deadlines always abort. Aligns with the existing error-code vocabulary; no re-classification needed for engine paths."}, {"id": "c", "label": "(a) AND (b) \\u2014 distinguish three: provider HTTP timeout (\`provider-timeout\`), child's own engine budget (\`provider-timeout\` w/ \`detail.source: engine\`), parent budget propagated (\`aborted+timeout\`)", "description": "Most discriminating. Three observable cases. Adds a \`detail.source\` field to disambiguate the two \`provider-timeout\` flavors. Slight surface inflation; max diagnostic clarity."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-14", "title": "Where does the timeout-classification logic live?", "context": "Today \`enrichAbortErrorWithParentReason\` (coordinator.ts:1243) tags abort errors with \`parent-aborted\` vs \`timeout\` based on the PARENT's signal reason. Child-level classification needs a hook somewhere.", "options": [{"id": "a", "label": "Inside the child engine's abort lifecycle (engine.ts) \\u2014 child engine inspects whether the abort reason is its own timeout vs an inherited signal", "description": "Symmetric: every engine self-classifies. Reusable for nested coordinators. Touches engine.ts cancellation paths. Cleanest separation."}, {"id": "b", "label": "In \`dispatchDelegate\` (coordinator.ts) \\u2014 the dispatcher knows whether the timeout came from \`decision.budget.timeoutMs\` (child's own) or parent's deadline propagation, and re-classifies on the way out", "description": "Localizes the change to coordinator.ts where Phase 2 D-11/12 already work. Engine stays unaware. Tighter blast radius."}, {"id": "c", "label": "In \`cancellation.ts\` helpers \\u2014 the existing \`enrichAbortErrorWithParentReason\` is extended with a sibling helper for child-level classification, called from both engine.ts and coordinator.ts", "description": "Helper-driven; logic in one place, called from both layers as needed. Mirrors Phase 2 D-08's pattern."}], "answer": null, "chat_more": "", "status": "unanswered"}]}, {"id": "tests-surface-plans", "title": "Tests, Public Surface, Plan Breakdown", "questions": [{"id": "Q-15", "title": "Public-surface inventory for Phase 4 \\u2014 what locks together?", "context": "Per CLAUDE.md, every event/result/exports change updates \`event-schema.test.ts\`, \`result-contract.test.ts\`, \`package-exports.test.ts\`, \`package.json\` exports/files, and CHANGELOG.md. Phase 4 candidates depend on Q-01/Q-09/Q-10/Q-13 answers but the inventory needs to be enumerated.", "options": [{"id": "a", "label": "Minimal: \`parentRunId\` (or chain) on bubbled events + ERROR-02 throw behavior + ERROR-03 reason discriminator strings", "description": "Smallest plausible surface. No new event variants, no new error codes (reuse existing \`aborted\`+\`provider-timeout\`). Only test additions and a new \`detail.reason\` value if Q-13 introduces one. CHANGELOG bullets: streaming wrap, ERROR-02 throw, ERROR-03 timeout discrimination."}, {"id": "b", "label": "Minimal + new \`aborted\` event variant from Phase 2 D-10 (parent-aborted-after-child-completed) \\u2014 finally land the deferred shape", "description": "Closes the Phase 2 D-10 'planner picks shape' open item. New event variant in \`event-schema.test.ts\`. Coherent with the streaming/cancel work. Bigger surface."}, {"id": "c", "label": "Minimal + new \`onChildFailure\` engine config option (if Q-09=b)", "description": "Conditional on Q-09=b. Adds engine config plumbing similar to Phase 3's \`maxConcurrentChildren\`. \`config-validation.test.ts\` updates."}, {"id": "d", "label": "All of the above \\u2014 Phase 4 is the kitchen-sink phase before Phase 5 docs", "description": "Maximum scope. Higher risk of plan churn. Aligns with 'last functional phase before docs' positioning if we want everything locked before v0.4.0 ships."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-16", "title": "Test organization for Phase 4 \\u2014 same hybrid pattern as Phase 2/3?", "context": "Phase 2 D-18 / Phase 3 D-15 established hybrid: contract tests in dedicated files (\`cancellation-contract.test.ts\`, \`event-schema.test.ts\`), scenario tests in subject-adjacent files (\`coordinator.test.ts\`, \`engine.test.ts\`).", "options": [{"id": "a", "label": "Hybrid, same pattern. Streaming-wrap contract \\u2192 \`streaming-api.test.ts\`. ERROR-02 throw \\u2192 \`public-error-api.test.ts\`. ERROR-03 timeout discriminator \\u2192 \`cancellation-contract.test.ts\`. Scenarios \\u2192 \`coordinator.test.ts\`, \`engine.test.ts\`", "description": "Continuity with Phase 2/3. Files already exist (per ROADMAP key files for Phase 4). Lowest cognitive load."}, {"id": "b", "label": "Same as (a) but extract a new \`src/tests/recursive-coordination.test.ts\` for cross-cutting end-to-end scenarios that touch streaming + error + concurrency", "description": "End-to-end home for the v0.4.0 milestone showcase scenarios. Useful for the Phase 5 example to mirror. Adds a new test file."}, {"id": "c", "label": "Promotion-on-growth: start in existing files, extract new files only if any single concern grows past ~150 LOC", "description": "Phase 3 D-15's policy. Defers the file-organization question to plan time."}], "answer": null, "chat_more": "", "status": "unanswered"}, {"id": "Q-17", "title": "Plan breakdown for Phase 4 \\u2014 how many plans and what's the dependency order?", "context": "Phase 2 = 4 plans (one per BUDGET req). Phase 3 = 3 plans (grouped by concern). Phase 4 has 6 requirements (STREAM-01/02/03 + ERROR-01/02/03). Some couple naturally (STREAM-01+02 \\u2192 wrapping; STREAM-03 \\u2192 cancel; ERROR-01 \\u2192 context surfacing; ERROR-02 \\u2192 throw; ERROR-03 \\u2192 timeout vocab).", "options": [{"id": "a", "label": "3 plans: 04-01 Streaming (STREAM-01/02/03 \\u2014 wrapping + cancel propagation), 04-02 Error escalation in coordinator (ERROR-01), 04-03 Unhandled throw + timeout discrimination (ERROR-02 + ERROR-03)", "description": "Concern-grouped, mirrors Phase 3 (3 plans). Each plan has surgical scope. ERROR-02 and ERROR-03 share the abort/error vocabulary work so co-locating them helps. Dependency order: 04-01 \\u2192 04-02 \\u2192 04-03 (cancel work in 04-01 is foundation for 04-02's error context which feeds 04-03's throw)."}, {"id": "b", "label": "2 plans: 04-01 Streaming (STREAM-01/02/03), 04-02 Errors (ERROR-01/02/03)", "description": "Coarse split. Easier to track but each plan is larger. ERROR-01/02/03 share enough machinery to merge cleanly. Risk: 04-02 grows large."}, {"id": "c", "label": "6 plans, one per requirement", "description": "Most granular; matches Phase 2's discipline. Risk: ERROR-02 alone is a 30-line plan (overkill); ERROR-03 mostly already shipped in Phase 2. Some plans become trivial."}, {"id": "d", "label": "4 plans: 04-01 Stream wrapping (STREAM-01/02), 04-02 Cancel propagation (STREAM-03), 04-03 Error context (ERROR-01), 04-04 Throw + timeout (ERROR-02/03)", "description": "Splits streaming into two \\u2014 wrapping vs cancel \\u2014 for cleaner reviews. Cancel work touches engine.ts heavily; isolating it might help. 4 plans matches Phase 2's count."}], "answer": null, "chat_more": "", "status": "unanswered"}]}]}`;
+
+function loadInitial() {
+  STATE.data = JSON.parse(QUESTIONS_JSON);
+  render();
+}
+
+function questionStatus(q) {
+  const hasAnswer = q.answer !== null && q.answer !== undefined && q.answer !== "";
+  const hasChat = q.chat_more && q.chat_more.trim().length > 0;
+  if (hasAnswer) return "answered";
+  if (hasChat) return "chat-more";
+  return "unanswered";
+}
+
+function recomputeStats() {
+  let total = 0, answered = 0, chat = 0;
+  for (const sec of STATE.data.sections) {
+    for (const q of sec.questions) {
+      total++;
+      q.status = questionStatus(q);
+      if (q.status === "answered") answered++;
+      if (q.chat_more && q.chat_more.trim().length > 0) chat++;
+    }
+  }
+  STATE.data.stats = {
+    total,
+    answered,
+    chat_more: chat,
+    remaining: total - answered
+  };
+  document.getElementById("stat-total").textContent = total;
+  document.getElementById("stat-answered").textContent = answered;
+  document.getElementById("stat-remaining").textContent = total - answered;
+  const pct = total > 0 ? Math.round((answered / total) * 100) : 0;
+  document.getElementById("progress-fill").style.width = pct + "%";
+  document.getElementById("stat-pct").textContent = pct + "%";
+}
+
+function render() {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+  for (const section of STATE.data.sections) {
+    const ans = section.questions.filter(q => questionStatus(q) === "answered").length;
+    const sec = document.createElement("section");
+    sec.className = "topic";
+    sec.innerHTML = `
+      <div class="topic-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        <h2>${escape(section.title)}</h2>
+        <span class="count">${ans}/${section.questions.length} answered</span>
+      </div>
+      <div class="topic-body"></div>
+    `;
+    const body = sec.querySelector(".topic-body");
+    for (const q of section.questions) {
+      body.appendChild(renderCard(section.id, q));
+    }
+    root.appendChild(sec);
+  }
+  recomputeStats();
+}
+
+function renderCard(secId, q) {
+  const card = document.createElement("div");
+  const isAnswered = questionStatus(q) === "answered";
+  card.className = "card" + (isAnswered ? " answered" : "");
+  card.dataset.qid = q.id;
+  const opts = q.options.map(o => `
+    <div class="option">
+      <input type="radio" name="${q.id}" id="${q.id}-${o.id}" value="${o.id}"
+        ${q.answer === o.id ? "checked" : ""}
+        onchange="setAnswer('${q.id}', '${o.id}')" />
+      <label for="${q.id}-${o.id}">
+        <span class="opt-label">(${o.id}) ${escape(o.label)}</span>
+        ${o.description ? `<span class="opt-desc">${escape(o.description)}</span>` : ""}
+      </label>
+    </div>
+  `).join("");
+  const chatHasContent = q.chat_more && q.chat_more.trim().length > 0;
+  card.innerHTML = `
+    <div><span class="qid">${q.id}</span><h3>${escape(q.title)}</h3></div>
+    <div class="ctx">${escape(q.context)}</div>
+    <div class="options">${opts}</div>
+    <textarea class="${chatHasContent ? "has-content" : ""}" data-qid="${q.id}"
+      placeholder="Add context, nuance, or clarification for this question..."
+      oninput="setChatMore('${q.id}', this.value); this.classList.toggle('has-content', this.value.trim().length > 0)"
+    >${escape(q.chat_more || "")}</textarea>
+  `;
+  return card;
+}
+
+function findQuestion(qid) {
+  for (const sec of STATE.data.sections) {
+    for (const q of sec.questions) {
+      if (q.id === qid) return q;
+    }
+  }
+  return null;
+}
+
+function setAnswer(qid, value) {
+  const q = findQuestion(qid);
+  if (!q) return;
+  q.answer = value;
+  q.status = questionStatus(q);
+  // refresh card visual
+  render();
+}
+
+function setChatMore(qid, text) {
+  const q = findQuestion(qid);
+  if (!q) return;
+  q.chat_more = text;
+  q.status = questionStatus(q);
+  recomputeStats();
+  // update section header counts
+  refreshSectionHeaders();
+}
+
+function refreshSectionHeaders() {
+  const sections = document.querySelectorAll("section.topic");
+  sections.forEach((sec, i) => {
+    const data = STATE.data.sections[i];
+    const ans = data.questions.filter(q => questionStatus(q) === "answered").length;
+    sec.querySelector(".count").textContent = `${ans}/${data.questions.length} answered`;
+  });
+}
+
+function escape(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function saveAnswers() {
+  recomputeStats();
+  const json = JSON.stringify(STATE.data, null, 2);
+  if (window.showSaveFilePicker && STATE.fileHandle) {
+    try {
+      const writable = await STATE.fileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      alert("Saved to " + STATE.path);
+      return;
+    } catch (e) { /* fall through to download */ }
+  }
+  if (window.showSaveFilePicker) {
+    try {
+      STATE.fileHandle = await window.showSaveFilePicker({
+        suggestedName: "04-QUESTIONS.json",
+        types: [{ description: "JSON", accept: { "application/json": [".json"] } }]
+      });
+      const writable = await STATE.fileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      alert("Saved. (Replace " + STATE.path + " with the saved file if not in-place.)");
+      return;
+    } catch (e) {}
+  }
+  downloadJson();
+}
+
+function downloadJson() {
+  recomputeStats();
+  const json = JSON.stringify(STATE.data, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "04-QUESTIONS.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+loadInitial();
+</script>
+</body>
+</html>

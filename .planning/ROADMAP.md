@@ -81,7 +81,13 @@ requirements_total: 27
   4. If the parent terminates without final synthesis after an unhandled child failure, the parent throws the child's original `DogpileError` unwrapped (same `code`, `providerId`, `detail`).
   5. Child timeouts surface as `provider-timeout` at the child level; parent-level timeouts surface as `aborted` with `detail.reason: "timeout"`.
 **Key files**: `src/runtime/engine.ts`, `src/runtime/coordinator.ts`, `src/runtime/cancellation.ts`, `src/types.ts`, `src/tests/streaming-api.test.ts`, `src/tests/cancellation-contract.test.ts`, `src/tests/public-error-api.test.ts`, `src/runtime/coordinator.test.ts`
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 04-01-stream-wrapping-PLAN.md — parentRunIds chain on stream events; per-child order contract; D-04 trace isolation
+- [ ] 04-02-cancel-propagation-PLAN.md — synthetic sub-run-failed drain on cancel; new aborted lifecycle event; late-event suppression
+- [ ] 04-03-coordinator-failure-context-PLAN.md — enriched transcript line; structured failures prompt section; onChildFailure config
+- [ ] 04-04-throw-and-timeout-discrimination-PLAN.md — last-real-failure throw matrix; classifyChildTimeoutSource helper; v0.4.0 CHANGELOG batched entry
 
 ### Phase 5: Documentation & Changelog
 **Goal**: Recursive coordination is discoverable: dedicated docs page, runnable example, README row, and a CHANGELOG entry that lists every public-surface addition.
