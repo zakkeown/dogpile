@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { run, stream } from "../index.js";
+import { replayStream, run, stream } from "../index.js";
 import type { ConfiguredModelProvider, ModelOutputChunk, ModelRequest, ModelResponse, RunResult, StreamEvent } from "../index.js";
 
 describe("SDK streaming API", () => {
@@ -468,6 +468,203 @@ describe("SDK streaming API", () => {
     expect(JSON.parse(JSON.stringify(result.trace))).toEqual(result.trace);
   });
 
+  it("STREAM-01 wraps bubbled child events with parentRunIds while parent events remain root-level", async () => {
+    const handle = stream({
+      intent: "Wrap direct child stream events.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: createDelegatingProvider("stream-wrap-depth-1-model", [
+        delegateBlock({ protocol: "sequential", intent: "direct child" }),
+        PARTICIPATE_OUTPUT
+      ]),
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+
+    const streamedEvents = await collectEvents(handle);
+    const result = await handle.result;
+    const childRunId = childRunIds(result)[0];
+    if (!childRunId) {
+      throw new Error("missing child run id");
+    }
+    const childEvents = streamedEvents.filter((event) => event.runId === childRunId);
+    const parentEvents = streamedEvents.filter((event) => event.runId === result.trace.runId);
+
+    expect(childEvents.length).toBeGreaterThan(0);
+    expect(childEvents.every((event) => parentRunIdsOf(event)?.join("/") === result.trace.runId)).toBe(true);
+    expect(parentEvents.every((event) => parentRunIdsOf(event) === undefined)).toBe(true);
+  });
+
+  it("STREAM-01 wraps grandchild events with root-first parentRunIds", async () => {
+    const handle = stream({
+      intent: "Wrap grandchild stream events.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: createDelegatingProvider("stream-wrap-depth-2-model", [
+        delegateBlock({ protocol: "coordinator", intent: "child coordinator" }),
+        delegateBlock({ protocol: "sequential", intent: "grandchild worker" }),
+        PARTICIPATE_OUTPUT,
+        PARTICIPATE_OUTPUT
+      ]),
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+
+    const streamedEvents = await collectEvents(handle);
+    const result = await handle.result;
+    const rootChildRunId = childRunIds(result)[0];
+    if (!rootChildRunId) {
+      throw new Error("missing child coordinator run id");
+    }
+    const childCompleted = result.trace.events.find((event) => event.type === "sub-run-completed");
+    if (childCompleted?.type !== "sub-run-completed") {
+      throw new Error("missing child coordinator result");
+    }
+    const grandchildRunId = childRunIds(childCompleted.subResult)[0];
+    if (!grandchildRunId) {
+      throw new Error("missing grandchild run id");
+    }
+    const grandchildEvents = streamedEvents.filter((event) => event.runId === grandchildRunId);
+
+    expect(grandchildEvents.length).toBeGreaterThan(0);
+    expect(grandchildEvents.every((event) => sameIds(parentRunIdsOf(event), [result.trace.runId, rootChildRunId]))).toBe(
+      true
+    );
+  });
+
+  it("STREAM-02 preserves per-child event order across setImmediate interleaves", async () => {
+    const observedOrder: string[] = [];
+    const handle = stream({
+      intent: "Preserve direct child chunk order.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: createChunkingDelegateProvider({
+        id: "stream-child-order-model",
+        planResponses: [
+          delegateBlock({ protocol: "sequential", intent: "chunking child", budget: { maxIterations: 1 } }),
+          PARTICIPATE_OUTPUT
+        ],
+        chunksPerChild: 20,
+        observedOrder
+      }),
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+
+    const streamedEvents = await collectEvents(handle);
+    const result = await handle.result;
+    const childRunId = childRunIds(result)[0];
+    if (!childRunId) {
+      throw new Error("missing child run id");
+    }
+    const streamedOrder = streamedEvents
+      .filter(isModelOutputChunk)
+      .filter((event) => event.runId === childRunId)
+      .map((event) => event.text);
+
+    expect(streamedOrder).toEqual(observedOrder);
+    expect(streamedOrder).toHaveLength(20);
+  });
+
+  it("STREAM-02 preserves each parallel child's order without constraining cross-child interleave", async () => {
+    const observedByRunId = new Map<string, string[]>();
+    const handle = stream({
+      intent: "Preserve parallel child subsequences.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      maxConcurrentChildren: 2,
+      model: createChunkingDelegateProvider({
+        id: "stream-parallel-child-order-model",
+        planResponses: [
+          delegateBlock([
+            { protocol: "sequential", intent: "parallel child A", budget: { maxIterations: 1 } },
+            { protocol: "sequential", intent: "parallel child B", budget: { maxIterations: 1 } }
+          ]),
+          PARTICIPATE_OUTPUT
+        ],
+        chunksPerChild: 3,
+        observedByRunId
+      }),
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+
+    const streamedEvents = await collectEvents(handle);
+    const result = await handle.result;
+    const children = childRunIds(result);
+
+    expect(children).toHaveLength(2);
+    for (const childRunId of children) {
+      const streamedOrder = streamedEvents
+        .filter(isModelOutputChunk)
+        .filter((event) => event.runId === childRunId)
+        .map((event) => event.text);
+      expect(streamedOrder).toEqual(observedByRunId.get(childRunId));
+    }
+  });
+
+  it("D-04 isolation keeps parent and child traces free of parentRunIds after streaming", async () => {
+    const handle = stream({
+      intent: "Keep persisted traces chain-free after live bubbling.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: createDelegatingProvider("stream-d04-isolation-model", [
+        delegateBlock({ protocol: "sequential", intent: "chain-free child trace" }),
+        PARTICIPATE_OUTPUT
+      ]),
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+
+    await collectEvents(handle);
+    const result = await handle.result;
+    const completed = result.trace.events.find((event) => event.type === "sub-run-completed");
+
+    expect(hasPersistedParentRunIds(result.trace.events)).toBe(false);
+    expect(completed?.type).toBe("sub-run-completed");
+    if (completed?.type !== "sub-run-completed") {
+      throw new Error("missing sub-run-completed event");
+    }
+    expect(hasPersistedParentRunIds(completed.subResult.trace.events)).toBe(false);
+  });
+
+  it("replayStream reconstructs parentRunIds for delegated grandchild stream events", async () => {
+    const handle = stream({
+      intent: "Replay grandchild ancestry.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: createDelegatingProvider("stream-replay-parentRunIds-model", [
+        delegateBlock({ protocol: "coordinator", intent: "child coordinator for replay" }),
+        delegateBlock({ protocol: "sequential", intent: "grandchild worker for replay" }),
+        PARTICIPATE_OUTPUT,
+        PARTICIPATE_OUTPUT
+      ]),
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+    const liveEvents = await collectEvents(handle);
+    const result = await handle.result;
+    const replayedEvents = await collectEvents(replayStream(result.trace));
+    const liveGrandchild = liveEvents.find((event) => parentRunIdsOf(event)?.length === 2);
+    const replayedGrandchild = replayedEvents.find((event) => event.runId === liveGrandchild?.runId);
+
+    expect(liveGrandchild).toBeDefined();
+    expect(replayedGrandchild).toBeDefined();
+    expect(parentRunIdsOf(replayedGrandchild)).toEqual(parentRunIdsOf(liveGrandchild));
+  });
+
   it("yields agent-turn events during sequential protocol execution before the result resolves", async () => {
     const gates = createResponseGates(["first turn", "second turn"]);
     const model = createGatedModelProvider("gated-sequential-model", gates);
@@ -617,6 +814,140 @@ describe("SDK streaming API", () => {
 });
 
 const output = "critic judged final output";
+const PARTICIPATE_OUTPUT = [
+  "role_selected: coordinator",
+  "participation: contribute",
+  "rationale: synthesize after sub-run",
+  "contribution:",
+  "synthesized after sub-run"
+].join("\n");
+
+function delegateBlock(payload: unknown): string {
+  return ["delegate:", "```json", JSON.stringify(payload), "```", ""].join("\n");
+}
+
+async function collectEvents(handle: AsyncIterable<StreamEvent>): Promise<StreamEvent[]> {
+  const events: StreamEvent[] = [];
+  for await (const event of handle) {
+    events.push(event);
+  }
+  return events;
+}
+
+function childRunIds(result: RunResult): string[] {
+  return result.trace.events
+    .filter((event) => event.type === "sub-run-completed")
+    .map((event) => event.subResult.trace.runId);
+}
+
+function parentRunIdsOf(event: StreamEvent | undefined): readonly string[] | undefined {
+  return (event as { readonly parentRunIds?: readonly string[] } | undefined)?.parentRunIds;
+}
+
+function sameIds(actual: readonly string[] | undefined, expected: readonly string[]): boolean {
+  return actual !== undefined && actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+}
+
+function hasPersistedParentRunIds(events: readonly StreamEvent[]): boolean {
+  return events.some((event) => parentRunIdsOf(event) !== undefined);
+}
+
+function isModelOutputChunk(event: StreamEvent): event is Extract<StreamEvent, { readonly type: "model-output-chunk" }> {
+  return event.type === "model-output-chunk";
+}
+
+function createDelegatingProvider(id: string, planResponses: readonly string[]): ConfiguredModelProvider {
+  let planIndex = 0;
+
+  return {
+    id,
+    async generate(request: ModelRequest): Promise<ModelResponse> {
+      const phase = String(request.metadata.phase);
+      const protocol = String(request.metadata.protocol);
+      const text =
+        protocol === "coordinator" && phase === "plan"
+          ? (planResponses[planIndex++] ?? PARTICIPATE_OUTPUT)
+          : protocol === "coordinator"
+            ? "parent final output"
+            : "child worker output";
+
+      return response(text);
+    }
+  };
+}
+
+function createChunkingDelegateProvider(options: {
+  readonly id: string;
+  readonly planResponses: readonly string[];
+  readonly chunksPerChild: number;
+  readonly observedOrder?: string[];
+  readonly observedByRunId?: Map<string, string[]>;
+}): ConfiguredModelProvider {
+  let planIndex = 0;
+  const streamedChildRunIds = new Set<string>();
+
+  return {
+    id: options.id,
+    async generate(request: ModelRequest): Promise<ModelResponse> {
+      const phase = String(request.metadata.phase);
+      const protocol = String(request.metadata.protocol);
+      const text =
+        protocol === "coordinator" && phase === "plan"
+          ? (options.planResponses[planIndex++] ?? PARTICIPATE_OUTPUT)
+          : protocol === "coordinator"
+            ? "parent final output"
+            : "child worker output";
+
+      return response(text);
+    },
+    async *stream(request: ModelRequest): AsyncIterable<ModelOutputChunk> {
+      const phase = String(request.metadata.phase);
+      const protocol = String(request.metadata.protocol);
+      if (protocol === "coordinator") {
+        const text =
+          phase === "plan"
+            ? (options.planResponses[planIndex++] ?? PARTICIPATE_OUTPUT)
+            : "parent final output";
+        yield { text };
+        return;
+      }
+
+      const runId = String(request.metadata.runId);
+      if (streamedChildRunIds.has(runId)) {
+        return;
+      }
+      streamedChildRunIds.add(runId);
+      const order = options.observedByRunId?.get(runId) ?? [];
+      options.observedByRunId?.set(runId, order);
+
+      for (let index = 0; index < options.chunksPerChild; index += 1) {
+        await immediate();
+        const text = `${runId}:chunk:${index}`;
+        order.push(text);
+        options.observedOrder?.push(text);
+        yield { text };
+      }
+    }
+  };
+}
+
+function response(text: string): ModelResponse {
+  return {
+    text,
+    usage: {
+      inputTokens: countWords(text),
+      outputTokens: countWords(text),
+      totalTokens: countWords(text) * 2
+    },
+    costUsd: 0.001
+  };
+}
+
+function immediate(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
 
 interface ResponseGate {
   readonly label: string;
