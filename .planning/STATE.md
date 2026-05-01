@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-01T22:49:17.706Z"
-last_activity: 2026-05-01 -- Phase 9 planning complete
+last_updated: "2026-05-01T22:57:05Z"
+last_activity: 2026-05-01 -- Phase 9 Plan 00 complete
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 19
-  completed_plans: 14
-  percent: 74
+  completed_plans: 15
+  percent: 79
 ---
 
 # State
@@ -24,12 +24,12 @@ progress:
 ## Current Position
 
 Phase: 09
-Plan: Not started
+Plan: 09-01
 Status: Ready to execute
-Last activity: 2026-05-01 -- Phase 9 planning complete
+Last activity: 2026-05-01 -- Phase 9 Plan 00 complete
 
 ```
-Progress [██████████] 100% (14/14 milestone plans)
+Progress [████████░░] 79% (15/19 milestone plans)
 ```
 
 ## Performance Metrics
@@ -37,11 +37,12 @@ Progress [██████████] 100% (14/14 milestone plans)
 | Metric | Value |
 |--------|-------|
 | Phases complete | 3 / 5 |
-| Requirements complete | 8 / 13 |
-| Plans complete | 14 / 14 |
+| Requirements complete | 9 / 13 |
+| Plans complete | 15 / 19 |
 | Phase 08 P01 | 5 min | 2 tasks | 2 files |
 | Phase 08 P02 | 4 min | 2 tasks | 3 files |
 | Phase 08 P03 | 4 min | 2 tasks | 4 files |
+| Phase 09 P00 | 4 min | 1 task | 2 files |
 
 ## Accumulated Context
 
@@ -58,6 +59,7 @@ Progress [██████████] 100% (14/14 milestone plans)
 - **RunResult.health is required.** All public and embedded RunResult construction paths now compute health from trace data before returning or embedding results.
 - **Protocol-level health is part of the result contract.** Sequential, broadcast, shared, and coordinator constructors compute health so stream results and delegated child subResults satisfy the same required contract as top-level run and replay results.
 - **Phase 7 public surface is locked.** `AnomalyCode`, `HealthAnomaly`, and `RunHealthSummary` are root-exported; `@dogpile/sdk/runtime/health` and `@dogpile/sdk/runtime/introspection` are package subpaths with package export tests, source-map packaging coverage, changelog, and CLAUDE.md invariants.
+- **Phase 9 live sub-run fixture is available.** `createDelegatingDeterministicProvider` emits a real delegate decision and paired sub-run lifecycle events for OTEL-02 contract tests without synthetic event injection.
 
 ### Todos
 
@@ -78,8 +80,8 @@ Progress [██████████] 100% (14/14 milestone plans)
 
 ## Session Continuity
 
-**Next action:** Start Phase 9 OTEL tracing bridge.
+**Next action:** Execute Phase 9 Plan 01 — Tracing module surface.
 
 ---
 
-*Last updated: 2026-05-01 — v0.5.0 Observability and Auditability roadmap created.*
+*Last updated: 2026-05-01 — Phase 9 Plan 00 complete.*

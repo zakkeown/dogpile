@@ -110,7 +110,7 @@ Plans:
 **Plans:** 5 plans
 Plans:
 **Wave 1**
-- [ ] 09-00-PLAN.md — Wave 0: createDelegatingDeterministicProvider in src/testing/ (unblocks Plan 03 OTEL-02 live coordinator-dispatch contract assertion)
+- [x] 09-00-PLAN.md — Wave 0: createDelegatingDeterministicProvider in src/testing/ (unblocks Plan 03 OTEL-02 live coordinator-dispatch contract assertion)
 - [ ] 09-01-PLAN.md — Tracing module surface (DogpileTracer/Span/Options + DOGPILE_SPAN_NAMES) + tracer? on EngineOptions/DogpileOptions + devDeps
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -139,7 +139,7 @@ Plans:
 | 6. Provenance Annotations | 6/6 | Complete | 2026-05-01 |
 | 7. Structured Event Introspection + Health Diagnostics | 5/5 | Complete | 2026-05-01 |
 | 8. Audit Event Schema | 3/3 | Complete | 2026-05-01 |
-| 9. OTEL Tracing Bridge | 0/? | Not started | — |
+| 9. OTEL Tracing Bridge | 1/5 | In Progress | — |
 | 10. Metrics / Counters | 0/? | Not started | — |
 
 ---
@@ -157,4 +157,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-05-01 — Phase 8 complete; audit event schema verified.*
+*Last updated: 2026-05-01 — Phase 9 Plan 00 complete; live delegating deterministic provider ready.*

@@ -31,7 +31,7 @@
 ### OTEL Tracing Bridge
 
 - [ ] **OTEL-01**: Caller can inject a duck-typed OTEL-compatible tracer on `EngineOptions` (no `@opentelemetry/*` import required) and receive spans for run start/end, sub-run start/end, and agent turn start/end
-- [ ] **OTEL-02**: Sub-run spans are nested under parent run spans reflecting the `parentRunIds` ancestry chain — delegate child runs do not appear as disconnected root traces in OTEL backends
+- [x] **OTEL-02**: Sub-run spans are nested under parent run spans reflecting the `parentRunIds` ancestry chain — delegate child runs do not appear as disconnected root traces in OTEL backends
 - [ ] **OTEL-03**: Tracer injection is optional; runs complete with no span overhead and no observable behavior change when no tracer is provided
 
 ### Metrics / Counters
