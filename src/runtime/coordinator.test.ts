@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { createDeterministicCoordinatorTestMission } from "../internal.js";
-import { Dogpile, DogpileError, run, runtimeToolManifest, stream } from "../index.js";
+import {
+  Dogpile,
+  DogpileError,
+  convergence,
+  evaluateTermination,
+  run,
+  runtimeToolManifest,
+  stream
+} from "../index.js";
 import type {
   AgentSpec,
   ConfiguredModelProvider,
@@ -9,7 +17,8 @@ import type {
   ModelRequest,
   ModelResponse,
   RunEvent,
-  RuntimeTool
+  RuntimeTool,
+  TerminationEvaluationContext
 } from "../index.js";
 
 describe("coordinator protocol", () => {
@@ -1196,5 +1205,184 @@ describe("BUDGET-02 sub-run timeout / deadline propagation", () => {
     expect(childTimeoutMs).toBeDefined();
     expect(childTimeoutMs).toBeLessThanOrEqual(2000);
     expect(childTimeoutMs).not.toBe(99_999);
+  });
+
+  // BUDGET-04 / D-16: minTurns / minRounds floors apply per-protocol-instance.
+  // The evaluator (termination.ts protocolTerminationFloor / protocolMinTurns)
+  // reads protocol.minTurns from the protocol config object passed in
+  // `TerminationEvaluationContext.protocolConfig`. Per-instance config
+  // naturally means per-instance floors — same protocol kind in parent vs
+  // child carries different floors because they are different config objects.
+  //
+  // Plan-pseudocode reframed (inline correction): the plan's "child sequential
+  // minTurns: 5" is unreachable via delegate decision JSON (only `budget` is
+  // forwardable; `minTurns` lives on ProtocolConfig). We split D-16 into two
+  // layers: (a) a unit-level test on `evaluateTermination` proving each
+  // protocolConfig instance produces its own floor decision; and (b) an
+  // integration test proving the parent's floor is honored despite a
+  // delegate intervention.
+  it("minTurns floors apply per-protocol-instance — parent and child are independent (unit-level evaluator lock)", () => {
+    // Two protocolConfig instances with different minTurns. Same protocol
+    // KIND ("sequential" + convergence condition) — only the per-instance
+    // floor differs. The evaluator must produce independent decisions.
+    const condition = convergence({ stableTurns: 2, minSimilarity: 1 });
+    const stableTranscript = [
+      {
+        agentId: "agent-1",
+        role: "planner",
+        input: "first",
+        output: "stable answer"
+      },
+      {
+        agentId: "agent-2",
+        role: "critic",
+        input: "second",
+        output: "stable answer"
+      },
+      {
+        agentId: "agent-3",
+        role: "synthesizer",
+        input: "third",
+        output: "stable answer"
+      }
+    ] as const;
+
+    function ctx(
+      protocolConfig: { kind: "sequential"; minTurns?: number; maxTurns?: number },
+      iteration: number
+    ): TerminationEvaluationContext {
+      return {
+        runId: `run-${protocolConfig.minTurns ?? "none"}`,
+        protocol: "sequential",
+        protocolConfig,
+        tier: "fast",
+        cost: { usd: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        events: [],
+        transcript: stableTranscript.slice(0, iteration),
+        iteration,
+        protocolIteration: iteration
+      };
+    }
+
+    // Parent instance: minTurns=3. At iteration=2 the floor blocks even
+    // though convergence would otherwise fire (stable transcript).
+    const parentCfg = { kind: "sequential" as const, minTurns: 3, maxTurns: 5 };
+    expect(evaluateTermination(condition, ctx(parentCfg, 2))).toEqual({ type: "continue", condition });
+
+    // Child instance: minTurns=5. At iteration=3 the parent's floor would
+    // be SATISFIED, but the child's higher floor still blocks. Same kind,
+    // different config object = different floor decision = per-instance
+    // semantics confirmed.
+    const childCfg = { kind: "sequential" as const, minTurns: 5, maxTurns: 10 };
+    expect(evaluateTermination(condition, ctx(childCfg, 3))).toEqual({ type: "continue", condition });
+
+    // And: child's higher floor does NOT raise the parent's effective floor.
+    // At iteration=3 with parentCfg, convergence fires (floor satisfied).
+    const parentDecisionAt3 = evaluateTermination(condition, ctx(parentCfg, 3));
+    expect(parentDecisionAt3.type).toBe("stop");
+  });
+
+  it("BUDGET-04 / D-16: parent's minTurns floor is honored despite a delegate intervention (integration)", async () => {
+    // Parent coordinator: minTurns=3 + convergence(stableTurns:2). Without
+    // the floor, convergence would fire at iteration=2 (two stable plan
+    // turns). With the floor, the parent must reach 3 transcript entries.
+    // The delegate dispatch contributes 1 transcript entry (the synthetic
+    // delegate-result per Phase 1 D-18); the parent's own iterations must
+    // continue until the floor is satisfied.
+    const provider = createScriptedCoordinatorProvider({
+      id: "budget-04-d16-integration-model",
+      planResponses: [
+        delegateBlock({ protocol: "sequential", intent: "child runs independently" }),
+        PARTICIPATE_OUTPUT,
+        PARTICIPATE_OUTPUT,
+        PARTICIPATE_OUTPUT
+      ]
+    });
+
+    const result = await run({
+      intent: "BUDGET-04 D-16: parent's floor is honored despite delegate.",
+      protocol: { kind: "coordinator", minTurns: 3, maxTurns: 5 },
+      tier: "fast",
+      terminate: convergence({ stableTurns: 2, minSimilarity: 1 }),
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+
+    // Parent's transcript must satisfy parent's floor (>= 3 entries).
+    expect(result.transcript.length).toBeGreaterThanOrEqual(3);
+
+    // Exactly one delegate-result entry was contributed by the sub-run.
+    const delegateResults = result.transcript.filter(
+      (entry) => entry.role === "delegate-result"
+    );
+    expect(delegateResults).toHaveLength(1);
+  });
+
+  // BUDGET-04 / D-17 (explicit must_have lock): a successful sub-run produces
+  // exactly one synthetic transcript entry with `role: "delegate-result"` and
+  // `agentId: "sub-run:<childRunId>"` matching the sub-run-completed event.
+  // That entry counts as exactly one parent iteration in transcript-length-
+  // based termination math (per termination.ts:449-451 protocolProgress).
+  it("sub-run-completed counts as exactly one parent iteration via synthetic transcript entry (D-17 explicit lock)", async () => {
+    // Parent minTurns=2: after the delegate (1 transcript entry from the
+    // synthetic delegate-result), the parent needs at least 1 more own
+    // iteration to satisfy the floor. The scripted plan supplies a
+    // PARTICIPATE_OUTPUT for that follow-up turn.
+    const provider = createScriptedCoordinatorProvider({
+      id: "budget-04-d17-model",
+      planResponses: [
+        delegateBlock({ protocol: "sequential", intent: "single delegate" }),
+        PARTICIPATE_OUTPUT,
+        PARTICIPATE_OUTPUT
+      ]
+    });
+
+    const result = await run({
+      intent: "BUDGET-04 D-17: synthetic delegate-result counts as one iteration.",
+      protocol: { kind: "coordinator", minTurns: 2, maxTurns: 4 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+
+    // Exactly one delegate-result entry exists (per Phase 1 D-18).
+    const delegateResults = result.transcript.filter(
+      (entry) => entry.role === "delegate-result"
+    );
+    expect(delegateResults).toHaveLength(1);
+
+    // Exactly one transcript entry has agentId starting with "sub-run:"
+    // (the synthetic entry).
+    const subRunEntries = result.transcript.filter((entry) =>
+      entry.agentId.startsWith("sub-run:")
+    );
+    expect(subRunEntries).toHaveLength(1);
+
+    // The single delegate-result entry's agentId matches the actual
+    // childRunId from the sub-run-completed event.
+    const subRunCompletedEvent = result.trace.events.find(
+      (event) => event.type === "sub-run-completed"
+    );
+    if (subRunCompletedEvent?.type !== "sub-run-completed") {
+      throw new Error("expected sub-run-completed event");
+    }
+    expect(delegateResults[0]?.agentId).toBe(`sub-run:${subRunCompletedEvent.childRunId}`);
+
+    // Parent transcript counts: 1 delegate-result + at least 1 own
+    // participate turn (to satisfy minTurns=2). Confirms the synthetic
+    // entry was counted as exactly one iteration toward the floor.
+    expect(result.transcript.length).toBeGreaterThanOrEqual(2);
+
+    // The non-delegate-result entries are the parent's own own contributions.
+    const ownEntries = result.transcript.filter(
+      (entry) => entry.role !== "delegate-result"
+    );
+    expect(ownEntries.length).toBeGreaterThanOrEqual(1);
   });
 });
