@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.4.0
 milestone_name: milestone
-status: Phase 3 Plan 03-02 complete; ready for 03-03 local-provider clamping
-last_updated: "2026-05-01T01:47:19Z"
+status: Phase 3 complete; ready for Phase 4 streaming and child error escalation
+last_updated: "2026-05-01T01:57:08Z"
 last_activity: 2026-05-01
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
-  completed_plans: 11
-  percent: 92
+  completed_plans: 12
+  percent: 100
 ---
 
 # State
@@ -23,18 +23,18 @@ progress:
 
 ## Current Position
 
-Phase: 03
-Plan: 03
-Status: Phase 3 Plan 03-02 complete; ready for local-provider clamping
+Phase: 04
+Plan: TBD
+Status: Phase 3 complete; ready for streaming and child error escalation planning
 Last activity: 2026-05-01
 
 ## Performance Metrics
 
 | Metric | Value |
 |--------|-------|
-| Phases complete | 2 / 5 |
-| Requirements complete | 12 / 27 |
-| Plans complete | 11 / 12 |
+| Phases complete | 3 / 5 |
+| Requirements complete | 13 / 27 |
+| Plans complete | 12 / 12 |
 
 ## Accumulated Context
 
@@ -52,10 +52,12 @@ Last activity: 2026-05-01
 - **Phase 3 Plan 03-01 — Local spoofing guard.** `locality: "remote"` on a detected-local OpenAI-compatible `baseURL` throws `invalid-configuration` with `detail.reason: "remote-override-on-local-host"`.
 - **Phase 3 Plan 03-02 — Bounded fan-out dispatch.** Coordinator delegate arrays now execute through a per-turn semaphore with default `maxConcurrentChildren=4`, per-run/decision lowering, `sub-run-queued` pressure events, completion-order result prompts, and synthetic `sibling-failed` failures for queued children abandoned after a sibling failure.
 - **Phase 3 Plan 03-02 — Additive fan-out identity.** `parentDecisionId` format remains unchanged; `parentDecisionArrayIndex` disambiguates delegates from the same plan turn on queued/started/completed/failed sub-run events.
+- **Phase 3 Plan 03-03 — Local-provider clamp.** Coordinator fan-out now walks the active provider tree at each dispatch; any `metadata.locality === "local"` provider clamps effective child concurrency to 1 and emits exactly one `sub-run-concurrency-clamped` event per run with `reason: "local-provider-detected"`.
+- **Phase 3 Plan 03-03 — Public-surface wrap-up.** The v0.4.0 CHANGELOG now includes the Phase 1-3 recursive coordination public-surface inventory, including `metadata.locality`, `maxConcurrentChildren`, `sub-run-queued`, `parentDecisionArrayIndex`, `sub-run-concurrency-clamped`, and replay decision literals.
 
 ### Todos
 
-- Execute Phase 3 Plan 03-03: local-provider clamping + clamp event.
+- Plan Phase 4: child event streaming and child error escalation.
 
 ### Blockers
 
@@ -63,8 +65,8 @@ Last activity: 2026-05-01
 
 ## Session Continuity
 
-**Next action:** Execute `.planning/phases/03-provider-locality-bounded-concurrency/03-03-PLAN.md`.
+**Next action:** Plan Phase 4: Streaming & Child Error Escalation.
 
 ---
 
-*Last updated: 2026-05-01 — Phase 3 Plan 03-02 complete; 12/27 requirements shipped; verify green.*
+*Last updated: 2026-05-01 — Phase 3 complete; 13/27 requirements shipped; verify green.*

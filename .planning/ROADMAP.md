@@ -14,8 +14,8 @@ requirements_total: 27
 ## Phases
 
 - [x] **Phase 1: Delegate Decision & Sub-Run Traces** — `delegate` decision on `coordinator`; embedded child traces; replay-without-re-execute; event-shape locks.
-- [ ] **Phase 2: Budget, Cancellation, Cost Roll-Up** — Parent abort + timeout propagation; recursive cost/token roll-up; per-instance termination floors.
-- [ ] **Phase 3: Provider Locality & Bounded Concurrency** — `locality` field on `ConfiguredModelProvider`; OpenAI-compatible auto-detect; `maxConcurrentChildren` with local auto-clamp.
+- [x] **Phase 2: Budget, Cancellation, Cost Roll-Up** — Parent abort + timeout propagation; recursive cost/token roll-up; per-instance termination floors.
+- [x] **Phase 3: Provider Locality & Bounded Concurrency** — `locality` field on `ConfiguredModelProvider`; OpenAI-compatible auto-detect; `maxConcurrentChildren` with local auto-clamp.
 - [ ] **Phase 4: Streaming & Child Error Escalation** — Child events wrapped on parent stream; cancel propagation; child failure surfaced through coordinator decision context.
 - [ ] **Phase 5: Documentation & Changelog** — `docs/recursive-coordination.md`, runnable example, README row, CHANGELOG v0.4.0 entry.
 
@@ -68,7 +68,7 @@ requirements_total: 27
 **Plans**: 3 plans
 - [x] 03-01-PLAN.md — Provider Locality (PROVIDER-01..03): metadata.locality field + classifyHostLocality + dual validation + asymmetric override
 - [x] 03-02-PLAN.md — Bounded Dispatch + Array-Parser Unlock (CONCURRENCY-01): semaphore, fan-out, sub-run-queued event, sibling-failed drain, completion-order transcript
-- [ ] 03-03-PLAN.md — Local-Provider Clamping + Event (CONCURRENCY-02): per-dispatch locality walk, lazy single-emit subRun.concurrencyClamped, CHANGELOG v0.4.0 wrap-up
+- [x] 03-03-PLAN.md — Local-Provider Clamping + Event (CONCURRENCY-02): per-dispatch locality walk, lazy single-emit subRun.concurrencyClamped, CHANGELOG v0.4.0 wrap-up
 
 ### Phase 4: Streaming & Child Error Escalation
 **Goal**: Live consumers see child events demultiplexable by `runId`, parent cancel reaches every child stream, and child failures surface as first-class context to the coordinator agent (or escalate unwrapped if unhandled).
@@ -99,9 +99,9 @@ requirements_total: 27
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Delegate Decision & Sub-Run Traces | 0/5 | Planned | - |
-| 2. Budget, Cancellation, Cost Roll-Up | 0/4 | Planned | - |
-| 3. Provider Locality & Bounded Concurrency | 2/3 | In progress | 2026-05-01 |
+| 1. Delegate Decision & Sub-Run Traces | 5/5 | Complete | 2026-04-30 |
+| 2. Budget, Cancellation, Cost Roll-Up | 4/4 | Complete | 2026-04-30 |
+| 3. Provider Locality & Bounded Concurrency | 3/3 | Complete | 2026-05-01 |
 | 4. Streaming & Child Error Escalation | 0/0 | Not started | - |
 | 5. Documentation & Changelog | 0/0 | Not started | - |
 

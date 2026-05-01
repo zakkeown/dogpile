@@ -32,7 +32,7 @@ REQ-ID format: `[CATEGORY]-[NN]`. Numbering restarts per milestone (no prior REQ
 ### CONCURRENCY — bounded parallelism
 
 - [x] **CONCURRENCY-01** — Coordinator config accepts `maxConcurrentChildren` (default 4). When a turn emits multiple `delegate` decisions, at most that many execute in parallel; the rest queue.
-- [ ] **CONCURRENCY-02** — When any provider in the active tree declares `locality: "local"`, `maxConcurrentChildren` clamps to 1 regardless of caller config and emits a `subRun.concurrencyClamped` warning event with `reason: "local-provider-detected"`.
+- [x] **CONCURRENCY-02** — When any provider in the active tree declares `locality: "local"`, `maxConcurrentChildren` clamps to 1 regardless of caller config and emits a `subRun.concurrencyClamped` warning event with `reason: "local-provider-detected"`.
 
 ### PROVIDER — locality hint
 
@@ -96,7 +96,7 @@ REQ-ID format: `[CATEGORY]-[NN]`. Numbering restarts per milestone (no prior REQ
 | PROVIDER-02 | Phase 3 | Complete |
 | PROVIDER-03 | Phase 3 | Complete |
 | CONCURRENCY-01 | Phase 3 | Complete |
-| CONCURRENCY-02 | Phase 3 | Pending |
+| CONCURRENCY-02 | Phase 3 | Complete |
 | STREAM-01 | Phase 4 | Pending |
 | STREAM-02 | Phase 4 | Pending |
 | STREAM-03 | Phase 4 | Pending |
