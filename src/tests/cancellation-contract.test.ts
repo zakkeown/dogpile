@@ -29,6 +29,54 @@ function delegateBlock(payload: unknown): string {
 }
 
 describe("caller cancellation contract", () => {
+  it("emits subRun.concurrencyClamped once with reason 'local-provider-detected' when a local provider is in the active tree (D-12)", async () => {
+    let planIndex = 0;
+    const provider: ConfiguredModelProvider = {
+      id: "local-provider-detected-contract-model",
+      metadata: { locality: "local" },
+      async generate(request: ModelRequest): Promise<ModelResponse> {
+        const protocol = String(request.metadata.protocol);
+        if (protocol === "sequential") {
+          return { text: "child result" };
+        }
+        if (String(request.metadata.phase) === "plan") {
+          const text =
+            planIndex === 0
+              ? delegateBlock([
+                { protocol: "sequential", intent: "child 0" },
+                { protocol: "sequential", intent: "child 1" },
+                { protocol: "sequential", intent: "child 2" }
+              ])
+              : participateOutput;
+          planIndex += 1;
+          return { text };
+        }
+        return { text: "final" };
+      }
+    };
+
+    const result = await run({
+      intent: "Emit local-provider concurrency clamp.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 4
+    });
+
+    const clampEvents = result.trace.events.filter((event) => event.type === "sub-run-concurrency-clamped");
+    expect(clampEvents).toHaveLength(1);
+    expect(clampEvents[0]).toMatchObject({
+      reason: "local-provider-detected",
+      effectiveMax: 1,
+      requestedMax: 4,
+      providerId: "local-provider-detected-contract-model"
+    });
+  });
+
   it("drains queued delegates with synthetic sibling-failed sub-run failures", async () => {
     let planIndex = 0;
     const provider: ConfiguredModelProvider = {

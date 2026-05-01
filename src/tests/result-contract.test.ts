@@ -34,6 +34,7 @@ import type {
   StreamEvent,
   SubRunBudgetClampedEvent,
   SubRunCompletedEvent,
+  SubRunConcurrencyClampedEvent,
   SubRunFailedEvent,
   SubRunParentAbortedEvent,
   SubRunQueuedEvent,
@@ -1072,6 +1073,25 @@ describe("single-call result contract", () => {
     const roundTripped = JSON.parse(JSON.stringify(fixture)) as SubRunQueuedEvent;
     expect(roundTripped).toEqual(fixture);
     expect(roundTripped.parentDecisionArrayIndex).toBe(2);
+  });
+
+  it("round-trips a sub-run-concurrency-clamped RunEvent variant through JSON serialization", () => {
+    const fixture: SubRunConcurrencyClampedEvent = {
+      type: "sub-run-concurrency-clamped",
+      runId: "run-parent-concurrency-clamped-roundtrip",
+      at: "2026-05-01T00:00:06.000Z",
+      requestedMax: 8,
+      effectiveMax: 1,
+      reason: "local-provider-detected",
+      providerId: "local-roundtrip-provider"
+    };
+    const variant: RunEvent = fixture;
+    expect(variant.type).toBe("sub-run-concurrency-clamped");
+    const roundTripped = JSON.parse(JSON.stringify(fixture)) as SubRunConcurrencyClampedEvent;
+    expect(roundTripped).toEqual(fixture);
+    expect(roundTripped.requestedMax).toBe(8);
+    expect(roundTripped.effectiveMax).toBe(1);
+    expect(roundTripped.reason).toBe("local-provider-detected");
   });
 });
 

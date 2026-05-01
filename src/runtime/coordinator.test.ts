@@ -3,6 +3,7 @@ import { createDeterministicCoordinatorTestMission } from "../internal.js";
 import {
   Dogpile,
   DogpileError,
+  createEngine,
   convergence,
   evaluateTermination,
   run,
@@ -534,6 +535,66 @@ function createScriptedCoordinatorProvider(opts: ScriptedProviderOptions): Confi
   return provider;
 }
 
+interface ConcurrencyProbe {
+  inFlight: number;
+  maxInFlight: number;
+}
+
+interface LocalityScriptedProviderOptions extends ScriptedProviderOptions {
+  readonly locality: "local" | "remote";
+  readonly concurrency?: ConcurrencyProbe;
+}
+
+function createConcurrencyProbe(): ConcurrencyProbe {
+  return {
+    inFlight: 0,
+    maxInFlight: 0
+  };
+}
+
+function createLocalityScriptedProvider(opts: LocalityScriptedProviderOptions): ConfiguredModelProvider {
+  let planIndex = 0;
+  return {
+    id: opts.id ?? `${opts.locality}-scripted-coordinator-model`,
+    metadata: { locality: opts.locality },
+    async generate(request: ModelRequest): Promise<ModelResponse> {
+      opts.recordedRequests?.push(request);
+      const phase = String(request.metadata.phase);
+      const protocol = String(request.metadata.protocol);
+      if (protocol === "sequential") {
+        if (opts.concurrency !== undefined) {
+          opts.concurrency.inFlight += 1;
+          opts.concurrency.maxInFlight = Math.max(opts.concurrency.maxInFlight, opts.concurrency.inFlight);
+          await delay(5);
+          opts.concurrency.inFlight -= 1;
+        }
+        return { text: "child output", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+      }
+
+      let text: string;
+      if (phase === "plan") {
+        text = opts.planResponses[planIndex] ?? PARTICIPATE_OUTPUT;
+        planIndex += 1;
+      } else if (phase === "worker") {
+        text = opts.workerResponse ?? "worker output";
+      } else {
+        text = opts.finalResponse ?? "final output";
+      }
+      return {
+        text,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        costUsd: 0
+      };
+    }
+  };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 describe("coordinator delegate dispatch", () => {
   it("fans out delegate arrays and queues delegates beyond maxConcurrentChildren", async () => {
     const provider = createScriptedCoordinatorProvider({
@@ -960,6 +1021,204 @@ describe("coordinator delegate dispatch", () => {
     const completedCount = observedEvents.filter((event) => event.type === "sub-run-completed").length;
     expect(startedCount).toBe(8);
     expect(completedCount).toBe(8);
+  });
+});
+
+describe("local-provider concurrency clamp (Phase 3 CONCURRENCY-02)", () => {
+  it("clamps to 1 and emits subRun.concurrencyClamped when a local provider is in the active tree", async () => {
+    const concurrency = createConcurrencyProbe();
+    const provider = createLocalityScriptedProvider({
+      id: "local-clamp-fanout-model",
+      locality: "local",
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "child 0" },
+          { protocol: "sequential", intent: "child 1" },
+          { protocol: "sequential", intent: "child 2" },
+          { protocol: "sequential", intent: "child 3" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ],
+      concurrency
+    });
+
+    const result = await run({
+      intent: "Clamp local provider fan-out.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 4
+    });
+
+    const clampEvents = result.trace.events.filter((event) => event.type === "sub-run-concurrency-clamped");
+    const queuedEvents = result.trace.events.filter((event) => event.type === "sub-run-queued");
+
+    expect(clampEvents).toHaveLength(1);
+    expect(clampEvents[0]).toMatchObject({
+      requestedMax: 4,
+      effectiveMax: 1,
+      reason: "local-provider-detected",
+      providerId: "local-clamp-fanout-model"
+    });
+    expect(queuedEvents.length).toBeGreaterThanOrEqual(3);
+    expect(concurrency.maxInFlight).toBe(1);
+  });
+
+  it("does NOT re-emit clamp event on a second plan-turn fan-out within the same run", async () => {
+    const provider = createLocalityScriptedProvider({
+      id: "local-clamp-once-model",
+      locality: "local",
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "turn 1 child 0" },
+          { protocol: "sequential", intent: "turn 1 child 1" }
+        ]),
+        delegateBlock([
+          { protocol: "sequential", intent: "turn 2 child 0" },
+          { protocol: "sequential", intent: "turn 2 child 1" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ]
+    });
+
+    const result = await run({
+      intent: "Clamp once across multiple fan-out turns.",
+      protocol: { kind: "coordinator", maxTurns: 3 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 4
+    });
+
+    expect(result.trace.events.filter((event) => event.type === "sub-run-concurrency-clamped")).toHaveLength(1);
+    expect(result.trace.events.filter((event) => event.type === "sub-run-started")).toHaveLength(4);
+  });
+
+  it("does NOT emit clamp event when active provider is remote", async () => {
+    const provider = createLocalityScriptedProvider({
+      id: "remote-no-clamp-model",
+      locality: "remote",
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "remote child 0" },
+          { protocol: "sequential", intent: "remote child 1" },
+          { protocol: "sequential", intent: "remote child 2" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ]
+    });
+
+    const result = await run({
+      intent: "Do not clamp remote provider.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 3
+    });
+
+    expect(result.trace.events.filter((event) => event.type === "sub-run-concurrency-clamped")).toHaveLength(0);
+  });
+
+  it("isolates clamp flag per run on a shared engine", async () => {
+    const localProvider = createLocalityScriptedProvider({
+      id: "shared-engine-local-model",
+      locality: "local",
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "local child 0" },
+          { protocol: "sequential", intent: "local child 1" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ]
+    });
+    const remoteProvider = createLocalityScriptedProvider({
+      id: "shared-engine-remote-model",
+      locality: "remote",
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "remote child 0" },
+          { protocol: "sequential", intent: "remote child 1" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ]
+    });
+    const agents = [
+      { id: "lead", role: "coordinator" },
+      { id: "worker-a", role: "worker" }
+    ] as const;
+    const localEngine = createEngine({
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: localProvider,
+      agents,
+      maxConcurrentChildren: 4
+    });
+    const remoteEngine = createEngine({
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: remoteProvider,
+      agents,
+      maxConcurrentChildren: 4
+    });
+
+    const [localResult, remoteResult] = await Promise.all([
+      localEngine.run("Local shared-engine run."),
+      remoteEngine.run("Remote shared-engine run.")
+    ]);
+
+    const totalClampEvents = [
+      ...localResult.trace.events,
+      ...remoteResult.trace.events
+    ].filter((event) => event.type === "sub-run-concurrency-clamped");
+    expect(localResult.trace.events.filter((event) => event.type === "sub-run-concurrency-clamped")).toHaveLength(1);
+    expect(remoteResult.trace.events.filter((event) => event.type === "sub-run-concurrency-clamped")).toHaveLength(0);
+    expect(totalClampEvents).toHaveLength(1);
+  });
+
+  it("explicit maxConcurrentChildren override is silently clamped", async () => {
+    const provider = createLocalityScriptedProvider({
+      id: "local-silent-override-clamp-model",
+      locality: "local",
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "override child 0" },
+          { protocol: "sequential", intent: "override child 1" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ]
+    });
+
+    const result = await run({
+      intent: "Silently clamp explicit local-provider maxConcurrentChildren override.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 8
+    });
+
+    const clampEvents = result.trace.events.filter((event) => event.type === "sub-run-concurrency-clamped");
+    expect(clampEvents).toHaveLength(1);
+    expect(clampEvents[0]).toMatchObject({
+      requestedMax: 8,
+      effectiveMax: 1,
+      reason: "local-provider-detected",
+      providerId: "local-silent-override-clamp-model"
+    });
   });
 });
 

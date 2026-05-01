@@ -23,6 +23,7 @@ import type {
   StreamOutputEvent,
   SubRunBudgetClampedEvent,
   SubRunCompletedEvent,
+  SubRunConcurrencyClampedEvent,
   SubRunFailedEvent,
   SubRunParentAbortedEvent,
   SubRunQueuedEvent,
@@ -50,6 +51,7 @@ const expectedEventTypes = [
   "sub-run-parent-aborted",
   "sub-run-budget-clamped",
   "sub-run-queued",
+  "sub-run-concurrency-clamped",
   "budget-stop",
   "final"
 ] as const satisfies readonly RunEvent["type"][];
@@ -73,6 +75,7 @@ describe("trace event schema", () => {
       "sub-run-parent-aborted",
       "sub-run-budget-clamped",
       "sub-run-queued",
+      "sub-run-concurrency-clamped",
       "budget-stop",
       "final"
     ]);
@@ -578,6 +581,35 @@ describe("trace event schema", () => {
       "runId",
       "type"
     ]);
+    expect(JSON.parse(JSON.stringify(fixture))).toEqual(fixture);
+  });
+
+  it("locks the sub-run-concurrency-clamped event payload shape and JSON round-trip", () => {
+    const fixture: SubRunConcurrencyClampedEvent = {
+      type: "sub-run-concurrency-clamped",
+      runId: "run-parent-sub-run-concurrency-clamped",
+      at: "2026-05-01T00:00:01.000Z",
+      requestedMax: 4,
+      effectiveMax: 1,
+      reason: "local-provider-detected",
+      providerId: "local-provider"
+    };
+    const variant: RunEvent = fixture;
+
+    expect(variant.type).toBe("sub-run-concurrency-clamped");
+    expect(sortedKeys(fixture)).toEqual([
+      "at",
+      "effectiveMax",
+      "providerId",
+      "reason",
+      "requestedMax",
+      "runId",
+      "type"
+    ]);
+    expect(fixture.effectiveMax).toBe(1);
+    expect(fixture.reason).toBe("local-provider-detected");
+    expect(fixture.providerId).toBe("local-provider");
+    expectIsoTimestamp(fixture.at);
     expect(JSON.parse(JSON.stringify(fixture))).toEqual(fixture);
   });
 });
