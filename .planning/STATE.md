@@ -4,11 +4,11 @@ milestone: v0.5.0
 milestone_name: Observability and Auditability
 status: planning
 last_updated: "2026-05-01T00:00:00Z"
-last_activity: 2026-05-01 -- Roadmap created; Phase 6 is next
+last_activity: 2026-05-01 -- Phase 6 planned (6 plans, 3 waves); ready to execute
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 6
   completed_plans: 0
   percent: 0
 ---
@@ -23,10 +23,10 @@ progress:
 
 ## Current Position
 
-Phase: 6 — Provenance Annotations (next to start)
+Phase: 6 — Provenance Annotations
 Plan: —
-Status: Roadmap defined; ready for phase planning
-Last activity: 2026-05-01 — Roadmap created (Phases 6–10, 13 requirements, 100% coverage)
+Status: Ready to execute (6 plans planned)
+Last activity: 2026-05-01 — Phase 6 planned (6 plans across 3 waves; verification passed)
 
 ```
 Progress [----------] 0% (0/5 phases)
@@ -38,7 +38,7 @@ Progress [----------] 0% (0/5 phases)
 |--------|-------|
 | Phases complete | 0 / 5 |
 | Requirements complete | 0 / 13 |
-| Plans complete | 0 / 0 |
+| Plans complete | 0 / 6 |
 
 ## Accumulated Context
 
@@ -69,7 +69,7 @@ Progress [----------] 0% (0/5 phases)
 
 ## Session Continuity
 
-**Next action:** Roadmap defined. Run `/gsd-plan-phase 6` to plan Phase 6: Provenance Annotations.
+**Next action:** Phase 6 planned. Run `/gsd-execute-phase 6` to execute Phase 6: Provenance Annotations.
 
 ---
 
