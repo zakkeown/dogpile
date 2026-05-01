@@ -1654,7 +1654,7 @@ export interface RunMetadata {
  * Result returned by high-level single-call APIs.
  *
  * The returned shape is
- * `{ output, eventLog, transcript, usage, metadata, accounting, trace, cost, quality, evaluation }`.
+ * `{ output, eventLog, transcript, usage, metadata, accounting, trace, cost, quality, evaluation, health }`.
  * `output` is the final synthesized answer, `eventLog` is the complete ordered
  * coordination log, `transcript` is the complete agent-turn transcript,
  * `usage` reports token and dollar accounting, and `metadata` exposes stable
@@ -1663,6 +1663,7 @@ export interface RunMetadata {
  * serializable replay artifact, `cost` is retained as a compatibility alias
  * for `usage`, and `quality` and `evaluation` are present when a judge or
  * benchmark supplies a normalized score and serializable evaluation payload.
+ * `health` exposes machine-readable diagnostics once computed by the runtime.
  */
 export interface RunResult {
   /** Final synthesized answer for the supplied intent. */
@@ -1690,6 +1691,15 @@ export interface RunResult {
   readonly quality?: NormalizedQualityScore;
   /** Optional serializable evaluation data supplied by a caller-owned evaluator. */
   readonly evaluation?: RunEvaluation;
+  /**
+   * Machine-readable health summary for the run, auto-computed from trace events.
+   *
+   * Always present after Phase 7 engine integration. Typed as optional here for
+   * incremental wave safety — tightened to required in plan 07-04 after the engine
+   * attaches it. Use `computeHealth()` from `@dogpile/sdk/runtime/health` to
+   * re-compute with custom thresholds on a stored trace.
+   */
+  readonly health?: RunHealthSummary;
 }
 
 /**
@@ -1697,6 +1707,69 @@ export interface RunResult {
  * result is exposed to `run()` or `stream()` callers.
  */
 export type RunEvaluator = (result: Omit<RunResult, "quality" | "evaluation">) => RunEvaluation | Promise<RunEvaluation>;
+
+/**
+ * Machine-readable code identifying a health anomaly detected in a completed run.
+ *
+ * - `"runaway-turns"`: an agent exceeded the configured per-agent turn threshold.
+ * - `"budget-near-miss"`: budget utilization exceeded the configured near-miss threshold.
+ * - `"empty-contribution"`: an agent produced an empty (blank/whitespace) output turn.
+ * - `"provider-error-recovered"`: a provider call failed and was retried successfully.
+ *   Detection is deferred — computeHealth never emits this code in Phase 7 because no
+ *   trace signal exists without an event-shape change. The code is reserved for future use.
+ */
+export type AnomalyCode =
+  | "runaway-turns"
+  | "budget-near-miss"
+  | "empty-contribution"
+  | "provider-error-recovered";
+
+/**
+ * A single health anomaly detected in a completed run trace.
+ *
+ * All fields are required except `agentId`, which is present for per-agent anomalies
+ * (`"runaway-turns"`, `"empty-contribution"`, `"provider-error-recovered"`) and absent
+ * for global anomalies (`"budget-near-miss"`).
+ */
+export interface HealthAnomaly {
+  /** Machine-readable anomaly identifier. */
+  readonly code: AnomalyCode;
+  /** Severity level: `"error"` for runaway turns and empty contributions; `"warning"` for near-miss and recovered patterns. */
+  readonly severity: "warning" | "error";
+  /** Actual measured value that triggered the anomaly (turn count, utilization %, etc.). */
+  readonly value: number;
+  /** Threshold value that was exceeded (for comparison in UIs and alerting). */
+  readonly threshold: number;
+  /** Agent that triggered the anomaly, present for per-agent anomaly codes. */
+  readonly agentId?: string;
+}
+
+/**
+ * Machine-readable health summary for a completed run, auto-computed from trace events.
+ *
+ * Always present on {@link RunResult}. Re-computed identically by `replay()` from the
+ * same trace — no information is stored beyond what the trace events contain.
+ *
+ * Use `computeHealth(trace, thresholds)` from `@dogpile/sdk/runtime/health` to re-compute
+ * with custom thresholds.
+ */
+export interface RunHealthSummary {
+  /** Detected health anomalies. Empty array when no anomalies are found. */
+  readonly anomalies: readonly HealthAnomaly[];
+  /** Derived stats computed from trace events. */
+  readonly stats: {
+    /** Total number of agent-turn events in the trace. */
+    readonly totalTurns: number;
+    /** Number of unique agents that produced at least one turn. */
+    readonly agentCount: number;
+    /**
+     * Budget utilization as a percentage (0–100+).
+     * `null` when no USD cap was configured for the run.
+     * Computed as `(finalCost / maxUsd) * 100`.
+     */
+    readonly budgetUtilizationPct: number | null;
+  };
+}
 
 /**
  * Mission supplied to a high-level Dogpile workflow call.
