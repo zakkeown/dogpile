@@ -91,6 +91,7 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleProvider
 
   return {
     id: providerId,
+    modelId: options.model,
     metadata: { locality: resolvedLocality },
     async generate(request: ModelRequest): Promise<ModelResponse> {
       let response: Response;
