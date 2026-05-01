@@ -43,6 +43,8 @@ export interface RoleAssignmentEvent {
   readonly type: "role-assignment";
   /** Stable run id shared by all events in one workflow. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Agent receiving the role assignment. */
@@ -67,6 +69,8 @@ export interface ModelRequestEvent {
   readonly type: "model-request";
   /** Stable run id shared by all events in one workflow. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Stable provider call id within the run. */
@@ -95,6 +99,8 @@ export interface ModelResponseEvent {
   readonly type: "model-response";
   /** Stable run id shared by all events in one workflow. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Stable provider call id within the run. */
@@ -135,6 +141,8 @@ export interface ModelOutputChunkEvent {
   readonly type: "model-output-chunk";
   /** Stable run id shared by all events in one workflow. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Agent currently producing output. */
@@ -164,6 +172,8 @@ export interface ToolCallEvent {
   readonly type: "tool-call";
   /** Stable run id shared by all events in one workflow. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Stable tool call id within the run. */
@@ -191,6 +201,8 @@ export interface ToolResultEvent {
   readonly type: "tool-result";
   /** Stable run id shared by all events in one workflow. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Stable tool call id within the run. */
@@ -302,6 +314,8 @@ export interface TurnEvent {
   readonly type: "agent-turn";
   /** Stable run id shared by all events in one workflow. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Agent that produced this turn. */
@@ -369,6 +383,8 @@ export interface BroadcastEvent {
   readonly type: "broadcast";
   /** Stable run id shared by all events in one workflow. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** One-based broadcast round number. */
@@ -392,6 +408,8 @@ export interface BudgetStopEvent {
   readonly type: "budget-stop";
   /** Stable run id shared by all events in one workflow. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Normalized machine-readable budget stop reason. */
@@ -481,6 +499,8 @@ export interface SubRunStartedEvent {
   readonly type: "sub-run-started";
   /** Parent run id; matches the surrounding trace runId. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Child run id assigned to the dispatched sub-run. */
@@ -523,6 +543,8 @@ export interface SubRunCompletedEvent {
   readonly type: "sub-run-completed";
   /** Parent run id; matches the surrounding trace runId. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Child run id that produced this result. */
@@ -556,6 +578,8 @@ export interface SubRunFailedEvent {
   readonly type: "sub-run-failed";
   /** Parent run id; matches the surrounding trace runId. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Child run id that failed. */
@@ -612,6 +636,8 @@ export interface SubRunParentAbortedEvent {
   readonly type: "sub-run-parent-aborted";
   /** Parent run id; matches the surrounding trace runId. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Most-recent completed child run id whose completion preceded the abort. */
@@ -640,6 +666,8 @@ export interface SubRunBudgetClampedEvent {
   readonly type: "sub-run-budget-clamped";
   /** Parent run id; matches the surrounding trace runId. */
   readonly runId: string;
+  /** Root-first ancestry chain when bubbled through a parent stream. */
+  readonly parentRunIds?: readonly string[];
   /** ISO-8601 event timestamp. */
   readonly at: string;
   /** Child run id whose budget was clamped. */
@@ -669,6 +697,7 @@ export interface SubRunBudgetClampedEvent {
 export interface SubRunQueuedEvent {
   readonly type: "sub-run-queued";
   readonly runId: string;
+  readonly parentRunIds?: readonly string[];
   readonly at: string;
   readonly childRunId: string;
   readonly parentRunId: string;
@@ -695,6 +724,7 @@ export interface SubRunQueuedEvent {
 export interface SubRunConcurrencyClampedEvent {
   readonly type: "sub-run-concurrency-clamped";
   readonly runId: string;
+  readonly parentRunIds?: readonly string[];
   readonly at: string;
   /** The pre-clamp effective max that would have applied (engine/run/decision min). */
   readonly requestedMax: number;
