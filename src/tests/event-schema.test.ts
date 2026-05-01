@@ -447,7 +447,8 @@ describe("trace event schema", () => {
           }
         }
       },
-      partialTrace
+      partialTrace,
+      partialCost: { usd: 0.0001, inputTokens: 7, outputTokens: 11, totalTokens: 18 }
     };
     const variant: RunEvent = fixture;
 
@@ -458,6 +459,7 @@ describe("trace event schema", () => {
       "error",
       "parentDecisionId",
       "parentRunId",
+      "partialCost",
       "partialTrace",
       "runId",
       "type"
@@ -465,11 +467,14 @@ describe("trace event schema", () => {
     expectIsoTimestamp(fixture.at);
     expect(fixture.error.code).toBe("aborted");
     expect(fixture.partialTrace.runId).toBe(child.trace.runId);
+    // BUDGET-03 / D-02: partialCost is a locked public field.
+    expect(fixture.partialCost).toEqual({ usd: 0.0001, inputTokens: 7, outputTokens: 11, totalTokens: 18 });
 
     const roundTripped = JSON.parse(JSON.stringify(fixture)) as SubRunFailedEvent;
     expect(roundTripped).toEqual(fixture);
     expect(roundTripped.error.detail).toEqual(fixture.error.detail);
     expect(roundTripped.partialTrace.events).toEqual(partialTrace.events);
+    expect(roundTripped.partialCost).toEqual(fixture.partialCost);
   });
 
   it("locks the sub-run-parent-aborted event payload shape and JSON round-trip", () => {

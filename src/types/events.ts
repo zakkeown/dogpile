@@ -560,6 +560,14 @@ export interface SubRunFailedEvent {
   };
   /** Partial child {@link Trace} accumulated up to the failure point. */
   readonly partialTrace: Trace;
+  /**
+   * Cost from provider calls completed before the child threw (BUDGET-03 / D-02).
+   *
+   * Equals `lastCostBearingEventCost(partialTrace.events) ?? emptyCost()`. The
+   * parent rolls this into its own `accounting.cost` so failed children
+   * contribute their real wallet spend.
+   */
+  readonly partialCost: CostSummary;
 }
 
 /**

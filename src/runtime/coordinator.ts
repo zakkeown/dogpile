@@ -41,6 +41,7 @@ import {
   createRunUsage,
   createTranscriptLink,
   emptyCost,
+  lastCostBearingEventCost,
   nextProviderCallId
 } from "./defaults.js";
 import { classifyAbortReason, createAbortErrorFromSignal, throwIfAborted } from "./cancellation.js";
@@ -260,7 +261,15 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
           options,
           transcript,
           emit,
-          recordProtocolDecision
+          recordProtocolDecision,
+          // BUDGET-03 / D-01: roll child cost into the parent's closure-local
+          // totalCost accumulator BEFORE the sub-run-completed / sub-run-failed
+          // event is emitted. Parent's next `agent-turn`/`final` event reads
+          // totalCost from this same closure scope, so the recorded event cost
+          // reflects the rolled-up value.
+          recordSubRunCost: (cost: CostSummary): void => {
+            totalCost = addCost(totalCost, cost);
+          }
         });
         dispatchInput = dispatchResult.nextInput;
       }
@@ -791,6 +800,14 @@ interface DispatchDelegateOptions {
     event: RunEvent,
     decisionOptions?: { readonly transcriptEntryCount?: number }
   ) => void;
+  /**
+   * BUDGET-03 / D-01 seam: closure-mutation callback that adds child cost
+   * (subResult.cost on success, partialCost on failure) into the parent's
+   * `totalCost` accumulator. Invoked BEFORE `parentEmit(completedEvent)` /
+   * `parentEmit(failEvent)` so the existing "last cost-bearing event ===
+   * final.cost" invariant survives unchanged.
+   */
+  readonly recordSubRunCost: (cost: CostSummary) => void;
 }
 
 interface DispatchDelegateResult {
@@ -1000,6 +1017,10 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
     // abort error.
     const enrichedError = enrichAbortErrorWithParentReason(error, parentSignal);
     const errorPayload = errorPayloadFromUnknown(enrichedError, failedDecision);
+    // BUDGET-03 / D-02: capture real provider spend before the throw and
+    // roll it into the parent's totalCost BEFORE emitting sub-run-failed.
+    const partialCost = lastCostBearingEventCost(childEvents) ?? emptyCost();
+    input.recordSubRunCost(partialCost);
     const failEvent: SubRunFailedEvent = {
       type: "sub-run-failed",
       runId: input.parentRunId,
@@ -1008,7 +1029,8 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
       parentRunId: input.parentRunId,
       parentDecisionId: input.parentDecisionId,
       error: errorPayload,
-      partialTrace
+      partialTrace,
+      partialCost
     };
     parentEmit(failEvent);
     input.recordProtocolDecision(failEvent);
@@ -1030,6 +1052,12 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
   }
 
   removeParentAbortListener?.();
+
+  // BUDGET-03 / D-01: roll child's full cost into the parent's totalCost
+  // BEFORE emitting sub-run-completed. The next agent-turn / final event will
+  // read totalCost from the closure scope, preserving the existing
+  // "last cost-bearing event === final.cost" invariant.
+  input.recordSubRunCost(subResult.cost);
 
   const completedEvent: RunEvent = {
     type: "sub-run-completed",
