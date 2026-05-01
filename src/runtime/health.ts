@@ -4,6 +4,7 @@
  * @module
  */
 import type { HealthAnomaly, RunHealthSummary, Trace } from "../types.js";
+import type { TurnEvent } from "../types/events.js";
 
 // Re-export types so callers who import from this subpath get them directly.
 export type { HealthAnomaly, RunHealthSummary } from "../types.js";
@@ -56,5 +57,63 @@ export function computeHealth(
   trace: Trace,
   thresholds: HealthThresholds = DEFAULT_HEALTH_THRESHOLDS
 ): RunHealthSummary {
-  throw new Error("computeHealth: not implemented - see plan 07-03");
+  const turnEvents = trace.events.filter((event): event is TurnEvent => event.type === "agent-turn");
+  const agentIds = new Set(turnEvents.map((event) => event.agentId));
+  const totalTurns = turnEvents.length;
+  const agentCount = agentIds.size;
+
+  const maxUsd = trace.budget.caps?.maxUsd;
+  const finalCost = trace.finalOutput.cost.usd;
+  const budgetUtilizationPct: number | null =
+    maxUsd !== undefined ? (maxUsd === 0 ? 0 : (finalCost / maxUsd) * 100) : null;
+
+  const anomalies: HealthAnomaly[] = [];
+
+  if (thresholds.runawayTurns !== undefined) {
+    for (const agentId of agentIds) {
+      const count = turnEvents.filter((event) => event.agentId === agentId).length;
+      if (count > thresholds.runawayTurns) {
+        anomalies.push({
+          code: "runaway-turns",
+          severity: "error",
+          value: count,
+          threshold: thresholds.runawayTurns,
+          agentId
+        });
+      }
+    }
+  }
+
+  if (thresholds.budgetNearMissPct !== undefined && budgetUtilizationPct !== null) {
+    if (budgetUtilizationPct >= thresholds.budgetNearMissPct) {
+      anomalies.push({
+        code: "budget-near-miss",
+        severity: "warning",
+        value: budgetUtilizationPct,
+        threshold: thresholds.budgetNearMissPct
+      });
+    }
+  }
+
+  for (const event of turnEvents) {
+    if (event.output.trim() === "") {
+      anomalies.push({
+        code: "empty-contribution",
+        severity: "error",
+        value: 0,
+        threshold: 0,
+        agentId: event.agentId
+      });
+    }
+  }
+
+  // provider-error-recovered is deferred: no trace signal exists in Phase 7.
+  return {
+    anomalies,
+    stats: {
+      totalTurns,
+      agentCount,
+      budgetUtilizationPct
+    }
+  };
 }
