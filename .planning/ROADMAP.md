@@ -69,7 +69,7 @@ Plans:
 **Plans:** 5 plans
 Plans:
 - [x] 07-01-PLAN.md — Types + contracts: RunHealthSummary/HealthAnomaly/AnomalyCode in types.ts, skeleton modules, frozen fixture
-- [ ] 07-02-PLAN.md — queryEvents implementation + unit tests (introspection)
+- [x] 07-02-PLAN.md — queryEvents implementation + unit tests (introspection)
 - [ ] 07-03-PLAN.md — computeHealth implementation + unit tests (health diagnostics)
 - [ ] 07-04-PLAN.md — Engine attach: result.health on run/replay paths + canonicalizeRunResult + contract tests
 - [ ] 07-05-PLAN.md — Public-surface lockstep: package.json subpaths + package-exports.test.ts + CHANGELOG + CLAUDE.md
@@ -110,7 +110,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Provenance Annotations | 6/6 | Complete | 2026-05-01 |
-| 7. Structured Event Introspection + Health Diagnostics | 1/5 | In Progress | — |
+| 7. Structured Event Introspection + Health Diagnostics | 2/5 | In Progress | — |
 | 8. Audit Event Schema | 0/? | Not started | — |
 | 9. OTEL Tracing Bridge | 0/? | Not started | — |
 | 10. Metrics / Counters | 0/? | Not started | — |
@@ -130,4 +130,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-05-01 — Phase 7 plan 07-01 complete: contracts and fixtures established.*
+*Last updated: 2026-05-01 — Phase 7 plan 07-02 complete: queryEvents implemented and tested.*

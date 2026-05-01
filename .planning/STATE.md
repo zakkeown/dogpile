@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: Observability and Auditability
 status: executing
-last_updated: "2026-05-01T20:46:06Z"
-last_activity: 2026-05-01 -- Completed 07-01 Types + contracts
+last_updated: "2026-05-01T20:55:49Z"
+last_activity: 2026-05-01 -- Completed 07-02 queryEvents implementation + unit tests
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 11
-  completed_plans: 7
-  percent: 64
+  completed_plans: 8
+  percent: 73
 ---
 
 # State
@@ -24,12 +24,12 @@ progress:
 ## Current Position
 
 Phase: 07 (structured-event-introspection-health-diagnostics) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Executing Phase 07
-Last activity: 2026-05-01 -- Completed 07-01 Types + contracts
+Last activity: 2026-05-01 -- Completed 07-02 queryEvents implementation + unit tests
 
 ```
-Progress [██████----] 64% (7/11 milestone plans)
+Progress [███████---] 73% (8/11 milestone plans)
 ```
 
 ## Performance Metrics
@@ -38,7 +38,7 @@ Progress [██████----] 64% (7/11 milestone plans)
 |--------|-------|
 | Phases complete | 1 / 5 |
 | Requirements complete | 6 / 13 |
-| Plans complete | 7 / 11 |
+| Plans complete | 8 / 11 |
 
 ## Accumulated Context
 
@@ -50,6 +50,7 @@ Progress [██████----] 64% (7/11 milestone plans)
 - **Audit record is an independent type.** `AuditRecord` is not derived from `RunEvent` via Pick/Omit; it has its own `auditSchemaVersion: "1"` and is protected by a frozen fixture test.
 - **No `@opentelemetry/*` imports in src/runtime/, src/browser/, src/providers/.** OTEL integration is duck-typed only; a grep-based test will enforce this boundary.
 - **Phase 7 contracts ship before behavior.** `queryEvents` and `computeHealth` are stubbed contract surfaces in 07-01; 07-02 and 07-03 implement behavior against those signatures.
+- **queryEvents filter semantics are locked.** Filters compose with AND semantics; `turnRange` uses global 1-based `agent-turn` positions and excludes non-turn events, while `costRange` only includes `agent-turn` and `broadcast` events.
 
 ### Todos
 
@@ -70,7 +71,7 @@ Progress [██████----] 64% (7/11 milestone plans)
 
 ## Session Continuity
 
-**Next action:** Continue Phase 7 with 07-02 queryEvents implementation + unit tests.
+**Next action:** Continue Phase 7 with 07-03 computeHealth implementation + unit tests.
 
 ---
 
