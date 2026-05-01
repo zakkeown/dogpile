@@ -49,8 +49,8 @@ REQ-ID format: `[CATEGORY]-[NN]`. Numbering restarts per milestone (no prior REQ
 ### ERROR — child failure escalation
 
 - [x] **ERROR-01** — A child throwing `DogpileError` surfaces as a `subRun.failed` event into the coordinator's next decision context. The coordinator agent can retry, delegate differently, or terminate.
-- [ ] **ERROR-02** — If the parent terminates without final synthesis after an unhandled child failure, the parent throws the child's original `DogpileError` (no wrapping).
-- [ ] **ERROR-03** — Child timeouts surface as `provider-timeout` at child level; parent timeouts surface as `aborted` with `detail.reason: "timeout"`.
+- [x] **ERROR-02** — If the parent terminates without final synthesis after an unhandled child failure, the parent throws the child's original `DogpileError` (no wrapping).
+- [x] **ERROR-03** — Child timeouts surface as `provider-timeout` at child level; parent timeouts surface as `aborted` with `detail.reason: "timeout"`.
 
 ### DOCS — discoverability
 
@@ -101,8 +101,8 @@ REQ-ID format: `[CATEGORY]-[NN]`. Numbering restarts per milestone (no prior REQ
 | STREAM-02 | Phase 4 | Complete |
 | STREAM-03 | Phase 4 | Complete |
 | ERROR-01 | Phase 4 | Complete |
-| ERROR-02 | Phase 4 | Pending |
-| ERROR-03 | Phase 4 | Pending |
+| ERROR-02 | Phase 4 | Complete |
+| ERROR-03 | Phase 4 | Complete |
 | DOCS-01 | Phase 5 | Pending |
 | DOCS-02 | Phase 5 | Pending |
 | DOCS-03 | Phase 5 | Pending |

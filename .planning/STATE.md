@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.4.0
 milestone_name: milestone
-status: Phase 4 in progress; Plan 04-03 coordinator failure context complete
-last_updated: "2026-05-01T14:22:46Z"
-last_activity: 2026-05-01 -- Phase 04 Plan 04-03 complete
+status: Phase 4 complete; ready for Phase 5 documentation and changelog
+last_updated: "2026-05-01T14:38:39Z"
+last_activity: 2026-05-01 -- Phase 04 Plan 04-04 complete
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 22
-  completed_plans: 15
-  percent: 68
+  completed_plans: 16
+  percent: 73
 ---
 
 # State
@@ -25,16 +25,16 @@ progress:
 
 Phase: 04
 Plan: 04
-Status: Plan 04-03 complete; ready for throw and timeout discrimination
-Last activity: 2026-05-01 -- Phase 04 Plan 04-03 complete
+Status: Phase 4 complete; ready for Phase 5 documentation and changelog
+Last activity: 2026-05-01 -- Phase 04 Plan 04-04 complete
 
 ## Performance Metrics
 
 | Metric | Value |
 |--------|-------|
 | Phases complete | 3 / 5 |
-| Requirements complete | 17 / 27 |
-| Plans complete | 15 / 22 |
+| Requirements complete | 19 / 27 |
+| Plans complete | 16 / 22 |
 
 ## Accumulated Context
 
@@ -61,10 +61,12 @@ Last activity: 2026-05-01 -- Phase 04 Plan 04-03 complete
 - **Phase 4 Plan 04-02 — Aborted lifecycle event.** `AbortedEvent` joins `StreamLifecycleEvent` with `reason: "parent-aborted" | "timeout"` and is emitted before terminal stream `error` events on abort paths.
 - **Phase 4 Plan 04-03 — Coordinator failure context.** Real child failures now reach the next coordinator plan turn as enriched tagged text plus a structured JSON roster under `## Sub-run failures since last decision`; synthetic `sibling-failed` and `parent-aborted` failures are excluded.
 - **Phase 4 Plan 04-03 — onChildFailure config.** `onChildFailure?: "continue" | "abort"` is public on engine, high-level, and per-run surfaces; it resolves per-run > engine > default `continue`, and abort mode stores `triggeringFailureForAbortMode`.
+- **Phase 4 Plan 04-04 — Terminal child failure throws.** Budget terminal paths re-throw the last real child failure instance from `failureInstancesByChildRunId`; replay reconstructs a fresh `DogpileError` from serialized `sub-run-failed.error`; cancel and depth-overflow errors remain verbatim.
+- **Phase 4 Plan 04-04 — Timeout source discrimination.** `provider-timeout` errors now support optional `detail.source: "provider" | "engine"`; absence remains provider-compatible, and parent-budget propagation remains `aborted` with `detail.reason: "timeout"`.
 
 ### Todos
 
-- Execute Phase 4 Plan 04-04: throw and timeout discrimination.
+- Execute Phase 5 Plan 05-01: recursive coordination docs.
 
 ### Blockers
 
@@ -72,8 +74,8 @@ Last activity: 2026-05-01 -- Phase 04 Plan 04-03 complete
 
 ## Session Continuity
 
-**Next action:** Execute 04-04 throw and timeout discrimination.
+**Next action:** Execute Phase 5 Plan 05-01 recursive coordination docs.
 
 ---
 
-*Last updated: 2026-05-01 — Phase 4 Plan 04-03 complete; 17/27 requirements shipped; verify green.*
+*Last updated: 2026-05-01 — Phase 4 complete; 19/27 requirements shipped; verify green.*
