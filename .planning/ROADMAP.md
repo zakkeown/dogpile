@@ -84,9 +84,19 @@ Plans:
 3. A frozen JSON fixture (`src/tests/fixtures/audit-record-v1.json`) exists and the test suite rejects any schema change that is not accompanied by an explicit fixture update.
 **Plans:** 3 plans
 Plans:
-- [ ] 08-01-PLAN.md — AuditRecord types + createAuditRecord implementation + co-located unit tests
+**Wave 1**
+- [x] 08-01-PLAN.md — AuditRecord types + createAuditRecord implementation + co-located unit tests
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 08-02-PLAN.md — Frozen fixture (audit-record-v1.json) + type-check.ts + shape test
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 08-03-PLAN.md — Public-surface lockstep: /runtime/audit subpath + package-exports.test.ts + CHANGELOG + CLAUDE.md
+
+**Cross-cutting constraints:**
+- `AuditRecord` type has zero imports from RunEvent variants in its declaration block
+- `childRunIds?` uses `exactOptionalPropertyTypes` conditional spread (absent when no sub-runs)
+- All `readonly` fields on AuditRecord, AuditOutcome, AuditCost, AuditAgentRecord
 
 ### Phase 9: OTEL Tracing Bridge
 **Goal:** Callers can inject an optional duck-typed OTEL-compatible tracer on `EngineOptions`; when present the SDK emits spans for run start/end, sub-run start/end, and agent turn start/end with correct parent-child ancestry; when absent runs complete with zero span overhead.
