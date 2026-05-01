@@ -116,7 +116,8 @@ export type ReplayTraceProtocolDecisionType =
   | "fail-sub-run"
   | "mark-sub-run-parent-aborted"
   | "mark-sub-run-budget-clamped"
-  | "queue-sub-run";
+  | "queue-sub-run"
+  | "mark-sub-run-concurrency-clamped";
 
 /**
  * Protocol-level decision appended during execution.

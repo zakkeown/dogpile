@@ -681,6 +681,31 @@ export interface SubRunQueuedEvent {
 }
 
 /**
+ * Event emitted ONCE per run when the runtime detects a `"local"` provider
+ * in the coordinator's active tree and clamps `maxConcurrentChildren` to 1
+ * (Phase 3 CONCURRENCY-02 / D-12). Emitted at the FIRST delegate dispatch
+ * where the local-provider check trips. Subsequent dispatches in the same
+ * run do NOT re-emit. Runs with no delegates, or runs with delegates but
+ * no local provider, never emit this event.
+ *
+ * The clamp is silent (no throw, no console output) per D-13 — this event
+ * IS the warning surface; subscribers can react via the engine's `emit`
+ * callback.
+ */
+export interface SubRunConcurrencyClampedEvent {
+  readonly type: "sub-run-concurrency-clamped";
+  readonly runId: string;
+  readonly at: string;
+  /** The pre-clamp effective max that would have applied (engine/run/decision min). */
+  readonly requestedMax: number;
+  /** Always 1 — locality-clamp is a fixed cap. */
+  readonly effectiveMax: 1;
+  readonly reason: "local-provider-detected";
+  /** Stable id of the FIRST local provider found during the active-tree walk. */
+  readonly providerId: string;
+}
+
+/**
  * Successful coordination event emitted by Dogpile and persisted in traces.
  *
  * @remarks
@@ -700,6 +725,7 @@ export interface SubRunQueuedEvent {
  * - `sub-run-completed`: a delegated sub-run completed and embedded its full result.
  * - `sub-run-failed`: a delegated sub-run failed before completion.
  * - `sub-run-queued`: a delegated sub-run waited for a concurrency slot.
+ * - `sub-run-concurrency-clamped`: a local provider forced child concurrency to 1.
  * - `budget-stop`: a configured budget cap halted further model turns.
  * - `final`: the run completed and produced the final output.
  *
@@ -736,6 +762,7 @@ export type RunEvent =
   | SubRunParentAbortedEvent
   | SubRunBudgetClampedEvent
   | SubRunQueuedEvent
+  | SubRunConcurrencyClampedEvent
   | BudgetStopEvent
   | FinalEvent;
 
@@ -767,7 +794,8 @@ export type StreamLifecycleEvent =
   | SubRunFailedEvent
   | SubRunParentAbortedEvent
   | SubRunBudgetClampedEvent
-  | SubRunQueuedEvent;
+  | SubRunQueuedEvent
+  | SubRunConcurrencyClampedEvent;
 
 /**
  * Output event yielded by `stream()`.

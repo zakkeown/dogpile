@@ -94,7 +94,8 @@ export type DemoTraceEventMetadata =
   | DemoSubRunFailedEventMetadata
   | DemoSubRunParentAbortedEventMetadata
   | DemoSubRunBudgetClampedEventMetadata
-  | DemoSubRunQueuedEventMetadata;
+  | DemoSubRunQueuedEventMetadata
+  | DemoSubRunConcurrencyClampedEventMetadata;
 
 export interface DemoRoleAssignmentEventMetadata {
   readonly type: "role-assignment";
@@ -241,6 +242,14 @@ export interface DemoSubRunQueuedEventMetadata {
   readonly parentDecisionId: string;
   readonly parentDecisionArrayIndex: number;
   readonly queuePosition: number;
+}
+
+export interface DemoSubRunConcurrencyClampedEventMetadata {
+  readonly type: "sub-run-concurrency-clamped";
+  readonly requestedMax: number;
+  readonly effectiveMax: 1;
+  readonly reason: "local-provider-detected";
+  readonly providerId: string;
 }
 
 export interface DemoTraceEventListItem {
@@ -495,6 +504,8 @@ function traceEventTitle(event: RunEvent): string {
       return `Sub-run ${event.childRunId} budget clamped to ${event.clampedTimeoutMs}ms`;
     case "sub-run-queued":
       return `Sub-run ${event.childRunId} queued`;
+    case "sub-run-concurrency-clamped":
+      return `Sub-run concurrency clamped for provider ${event.providerId}`;
   }
 
   return assertNever(event);
@@ -525,6 +536,7 @@ function traceEventVisualSection(event: RunEvent): DemoTraceEventVisualSection {
     case "sub-run-parent-aborted":
     case "sub-run-budget-clamped":
     case "sub-run-queued":
+    case "sub-run-concurrency-clamped":
       return "activity-log";
   }
 
@@ -556,6 +568,7 @@ function traceEventVisualState(event: RunEvent): DemoTraceEventVisualState {
     case "sub-run-parent-aborted":
     case "sub-run-budget-clamped":
     case "sub-run-queued":
+    case "sub-run-concurrency-clamped":
       return "turn-completed";
   }
 
@@ -710,6 +723,14 @@ function traceEventMetadata(event: RunEvent): DemoTraceEventMetadata {
         parentDecisionId: event.parentDecisionId,
         parentDecisionArrayIndex: event.parentDecisionArrayIndex,
         queuePosition: event.queuePosition
+      };
+    case "sub-run-concurrency-clamped":
+      return {
+        type: event.type,
+        requestedMax: event.requestedMax,
+        effectiveMax: event.effectiveMax,
+        reason: event.reason,
+        providerId: event.providerId
       };
   }
 

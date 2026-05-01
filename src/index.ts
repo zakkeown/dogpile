@@ -188,6 +188,7 @@ export type {
   StopTerminationDecision,
   SubRunBudgetClampedEvent,
   SubRunCompletedEvent,
+  SubRunConcurrencyClampedEvent,
   SubRunFailedEvent,
   SubRunParentAbortedEvent,
   SubRunQueuedEvent,

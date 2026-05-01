@@ -18,6 +18,7 @@ import type {
   RunEvent,
   RunResult,
   SubRunBudgetClampedEvent,
+  SubRunConcurrencyClampedEvent,
   SubRunFailedEvent,
   SubRunQueuedEvent,
   SubRunParentAbortedEvent,
@@ -178,6 +179,29 @@ function createSemaphore(maxConcurrent: number): Semaphore {
   };
 }
 
+/**
+ * Walk the coordinator's active provider set and return the FIRST provider
+ * whose metadata.locality === "local", or undefined if none found.
+ *
+ * Walk order (forward-compat): options.model first, then options.agents in
+ * declaration order. AgentSpec has no `model` field today (Phase 3 D-11
+ * forward-compat scaffolding); the agent walk uses optional chaining and
+ * effectively no-ops until a future phase adds AgentSpec.model.
+ */
+function findFirstLocalProvider(options: CoordinatorRunOptions): ConfiguredModelProvider | undefined {
+  if (options.model.metadata?.locality === "local") {
+    return options.model;
+  }
+  // Forward-compat: AgentSpec.model not yet declared (Phase 3 D-11). Walk no-ops today; ready for caller-defined trees in a future milestone.
+  for (const agent of options.agents) {
+    const agentModel = (agent as { readonly model?: ConfiguredModelProvider }).model;
+    if (agentModel?.metadata?.locality === "local") {
+      return agentModel;
+    }
+  }
+  return undefined;
+}
+
 export async function runCoordinator(options: CoordinatorRunOptions): Promise<RunResult> {
   const runId = createRunId();
   const events: RunEvent[] = [];
@@ -185,6 +209,7 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
   const protocolDecisions: ReplayTraceProtocolDecision[] = [];
   const providerCalls: ReplayTraceProviderCall[] = [];
   let totalCost = emptyCost();
+  let concurrencyClampEmitted = false; // D-12: emit once per run, never per-engine.
   const maxTurns = options.protocol.maxTurns ?? options.agents.length;
   const activeAgents = options.agents.slice(0, maxTurns);
   const coordinator = activeAgents[0];
@@ -308,10 +333,29 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
           (max, delegate) => Math.min(max, delegate.maxConcurrentChildren ?? Number.POSITIVE_INFINITY),
           Number.POSITIVE_INFINITY
         );
-        const effectiveForTurn = Math.min(
+        let effectiveForTurn = Math.min(
           options.effectiveMaxConcurrentChildren ?? Number.POSITIVE_INFINITY,
           decisionMax
         );
+        const requestedMax = effectiveForTurn;
+        const localProvider = findFirstLocalProvider(options);
+        if (localProvider !== undefined) {
+          effectiveForTurn = 1;
+          if (!concurrencyClampEmitted) {
+            const clampEvent: SubRunConcurrencyClampedEvent = {
+              type: "sub-run-concurrency-clamped",
+              runId,
+              at: new Date().toISOString(),
+              requestedMax,
+              effectiveMax: 1,
+              reason: "local-provider-detected",
+              providerId: localProvider.id
+            };
+            emit(clampEvent);
+            recordProtocolDecision(clampEvent);
+            concurrencyClampEmitted = true;
+          }
+        }
         const semaphore = createSemaphore(effectiveForTurn);
         const childRunIds = delegates.map(() => createRunId());
         const dispatchResults: Array<{ readonly index: number; readonly result: DispatchDelegateResult }> = [];
