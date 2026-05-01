@@ -772,11 +772,18 @@ describe("trace event schema", () => {
     expectIsoTimestamp(fixture.at);
     expect(fixture.subResult.trace.runId).toBe(child.trace.runId);
     expect(fixture.subResult.output).toBe(child.output);
+    expect(Array.isArray(fixture.subResult.health.anomalies)).toBe(true);
+    expect(sortedKeys(fixture.subResult.health.stats)).toEqual([
+      "agentCount",
+      "budgetUtilizationPct",
+      "totalTurns"
+    ]);
 
     const roundTripped = JSON.parse(JSON.stringify(fixture)) as SubRunCompletedEvent;
     expect(roundTripped).toEqual(fixture);
     expect(roundTripped.subResult.trace.events).toEqual(child.trace.events);
     expect(roundTripped.subResult.accounting).toEqual(child.accounting);
+    expect(roundTripped.subResult.health).toEqual(child.health);
     expect(roundTripped.subResult.output).toBe(child.output);
   });
 

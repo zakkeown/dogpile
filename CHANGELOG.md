@@ -16,6 +16,14 @@ v0.5.0 Observability and Auditability starts with provenance annotations: model 
 - **`ReplayTraceProviderCall.modelId` required field.** The model identifier is now recorded in every provider call entry in `trace.providerCalls`. This is a shape change on the replay type — if you have hand-crafted `ReplayTraceProviderCall` objects, such as in tests, add the `modelId` field.
 - **New subpath: `@dogpile/sdk/runtime/provenance`.** Exports `getProvenance(event)`, `ProvenanceRecord`, and `PartialProvenanceRecord`. `getProvenance()` extracts normalized provenance fields from any `ModelRequestEvent` or `ModelResponseEvent`; the overloaded signature returns `ProvenanceRecord` with `completedAt` for response events and `PartialProvenanceRecord` without `completedAt` for request events.
 
+### Added — Structured event introspection + health diagnostics (Phase 7)
+
+- **New subpath: `@dogpile/sdk/runtime/introspection`.** Exports `queryEvents(events, filter)` and `EventQueryFilter`. `queryEvents()` filters a `readonly RunEvent[]` by event type, agent id, global turn range, and/or cost range with AND semantics, returning a narrowed subtype such as `TurnEvent[]` when `filter.type === "agent-turn"` without caller casts.
+- **New subpath: `@dogpile/sdk/runtime/health`.** Exports `computeHealth(trace, thresholds?)`, `HealthThresholds`, `DEFAULT_HEALTH_THRESHOLDS`, `RunHealthSummary`, and `HealthAnomaly`. `computeHealth()` derives anomaly records and stats from a trace without I/O or runtime state.
+- **`result.health: RunHealthSummary` required field.** Every `RunResult` now includes an always-present machine-readable health summary computed from trace events at result time and recomputed identically by `replay()`. The summary exposes `health.anomalies: readonly HealthAnomaly[]` and `health.stats.totalTurns`, `health.stats.agentCount`, and `health.stats.budgetUtilizationPct`.
+- **New root-exported health types.** `AnomalyCode`, `HealthAnomaly`, and `RunHealthSummary` are exported from `@dogpile/sdk`.
+- **Frozen health anomaly fixture.** `src/tests/fixtures/anomaly-record-v1.json` records one sample `HealthAnomaly` per anomaly code. `provider-error-recovered` is present in the `AnomalyCode` union and fixture but is not emitted by `computeHealth()` in Phase 7 because current traces have no provider-recovery signal without an event-shape change.
+
 ### Replay
 
 - **`replay()` synthesizes `model-request` / `model-response` events from `trace.providerCalls`.** The augmented event log returned by `replay()` includes provenance events derived from the canonical `providerCalls` anchor. This ensures provenance fields in replayed results are identical to those in live runs (PROV-02). Older traces without these events in `trace.events` gain them on replay.
