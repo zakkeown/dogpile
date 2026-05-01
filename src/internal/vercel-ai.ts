@@ -212,6 +212,7 @@ export function createVercelAIProvider<TOOLS extends ToolSet = ToolSet>(
 
   return {
     id: providerId,
+    modelId: typeof options.model === "string" ? options.model : options.model.modelId,
     async generate(request: ModelRequest): Promise<ModelResponse> {
       try {
         const result = await generateText(createTextOptions(options, request));
