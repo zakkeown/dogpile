@@ -50,13 +50,13 @@ Coordinated, observable, replayable multi-agent runs with a strict boundary: Dog
 
 <!-- Milestone v0.4.0: Recursive Coordination. See REQUIREMENTS.md for full REQ-IDs. -->
 
-- [ ] `delegate` decision on `coordinator` — agent-driven nesting, four-protocol list unchanged
-- [ ] Inline child traces with replay-embedded semantics
-- [ ] Parent → children propagation: abort, timeout ceiling + remaining budget, cost roll-up; floors stay per-instance
-- [ ] Bounded child concurrency (`maxConcurrentChildren`, default 4)
-- [ ] Provider `locality` hint; auto-clamp to concurrency 1 when local detected
-- [ ] Child events bubbled into parent stream (wrapped with child `runId`)
-- [ ] Child error escalation through coordinator decision context
+- [x] `delegate` decision on `coordinator` — agent-driven nesting, four-protocol list unchanged — Validated in Phase 1
+- [x] Inline child traces with replay-embedded semantics — Validated in Phase 1
+- [x] Parent → children propagation: abort, timeout ceiling + remaining budget, cost roll-up; floors stay per-instance — Validated in Phase 2
+- [x] Bounded child concurrency (`maxConcurrentChildren`, default 4) — Validated in Phase 3
+- [x] Provider `locality` hint; auto-clamp to concurrency 1 when local detected — Validated in Phase 3
+- [x] Child events bubbled into parent stream (wrapped with child ancestry) — Validated in Phase 4
+- [x] Child error escalation through coordinator decision context — Validated in Phase 4
 - [ ] `docs/recursive-coordination.md` + `examples/` entry + README row
 
 ### Out of Scope
@@ -126,4 +126,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-30 after milestone v0.4.0 (Recursive Coordination) defined.*
+*Last updated: 2026-05-01 after Phase 4 (Streaming & Child Error Escalation) verified.*
