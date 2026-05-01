@@ -590,6 +590,62 @@ function createLocalityScriptedProvider(opts: LocalityScriptedProviderOptions): 
   };
 }
 
+interface FailureContextProviderOptions {
+  readonly id: string;
+  readonly failureIntents: ReadonlySet<string>;
+  readonly planResponses: readonly string[];
+  readonly recordedRequests?: ModelRequest[];
+  readonly detailReasons?: ReadonlyMap<string, string>;
+}
+
+function createFailureContextProvider(opts: FailureContextProviderOptions): ConfiguredModelProvider {
+  let planIndex = 0;
+  return {
+    id: opts.id,
+    async generate(request: ModelRequest): Promise<ModelResponse> {
+      opts.recordedRequests?.push(request);
+      const phase = String(request.metadata.phase);
+      const protocol = String(request.metadata.protocol);
+      if (protocol === "sequential") {
+        const intent = String(request.messages.find((message) => message.role === "user")?.content ?? "");
+        const failingIntent = [...opts.failureIntents].find((candidate) => intent.includes(candidate));
+        if (failingIntent !== undefined) {
+          throw new DogpileError({
+            code: "provider-timeout",
+            message: `${failingIntent} exploded`,
+            providerId: opts.id,
+            retryable: false,
+            detail: opts.detailReasons?.has(failingIntent)
+              ? { reason: opts.detailReasons.get(failingIntent) }
+              : undefined
+          });
+        }
+        return {
+          text: `child output for ${intent}`,
+          usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 },
+          costUsd: 0.003
+        };
+      }
+      if (phase === "plan") {
+        return {
+          text: opts.planResponses[planIndex++] ?? PARTICIPATE_OUTPUT,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          costUsd: 0
+        };
+      }
+      return { text: "final output", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+    }
+  };
+}
+
+function extractFailuresSection(prompt: string): JsonObject[] {
+  const match = /## Sub-run failures since last decision\n\n```json\n(?<json>[\s\S]*?)\n```/u.exec(prompt);
+  if (!match?.groups?.["json"]) {
+    return [];
+  }
+  return JSON.parse(match.groups["json"]) as JsonObject[];
+}
+
 function createMinimalChildResult(output: string, modelProviderId: string): RunResult {
   const cost = { usd: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   return {
@@ -655,6 +711,282 @@ function delay(ms: number): Promise<void> {
 }
 
 describe("coordinator delegate dispatch", () => {
+  it("adds transcript enrichment for real child failures", async () => {
+    const planRequests: ModelRequest[] = [];
+    const provider = createFailureContextProvider({
+      id: "failure-transcript-enrichment-model",
+      failureIntents: new Set(["fail first child"]),
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "fail first child" },
+          { protocol: "sequential", intent: "succeed second child" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ],
+      recordedRequests: planRequests
+    });
+
+    await run({
+      intent: "Surface child failure context.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 2
+    });
+
+    const followUpPrompt = planRequests
+      .filter((request) => request.metadata.phase === "plan")[1]
+      ?.messages.find((message) => message.role === "user")?.content ?? "";
+
+    expect(followUpPrompt).toMatch(
+      /\[sub-run [^\]]+ failed \| code=provider-timeout \| spent=\$0\.003\]: fail first child exploded/u
+    );
+  });
+
+  it("renders structured failures section with only prompt-safe fields", async () => {
+    const planRequests: ModelRequest[] = [];
+    const provider = createFailureContextProvider({
+      id: "structured-failures-section-model",
+      failureIntents: new Set(["fail with reason", "fail without reason"]),
+      detailReasons: new Map([["fail with reason", "fixture-reason"]]),
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "fail with reason" },
+          { protocol: "sequential", intent: "fail without reason" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ],
+      recordedRequests: planRequests
+    });
+
+    await run({
+      intent: "Render structured failure context.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 2
+    });
+
+    const followUpPrompt = planRequests
+      .filter((request) => request.metadata.phase === "plan")[1]
+      ?.messages.find((message) => message.role === "user")?.content ?? "";
+    const failures = extractFailuresSection(followUpPrompt);
+
+    expect(followUpPrompt).toContain("## Sub-run failures since last decision");
+    expect(failures).toHaveLength(2);
+    expect(failures[0]).toEqual({
+      childRunId: expect.any(String),
+      intent: "fail with reason",
+      error: {
+        code: "provider-timeout",
+        message: "fail with reason exploded",
+        detail: { reason: "fixture-reason" }
+      },
+      partialCost: { usd: 0.003 }
+    });
+    expect(failures[1]).toEqual({
+      childRunId: expect.any(String),
+      intent: "fail without reason",
+      error: {
+        code: "provider-timeout",
+        message: "fail without reason exploded"
+      },
+      partialCost: { usd: 0.003 }
+    });
+    for (const failure of failures) {
+      expect(Object.keys(failure).sort()).toEqual(["childRunId", "error", "intent", "partialCost"]);
+      expect(failure).not.toHaveProperty("partialTrace");
+    }
+  });
+
+  it("omits empty failures section when the most recent dispatch wave succeeds", async () => {
+    const planRequests: ModelRequest[] = [];
+    const provider = createFailureContextProvider({
+      id: "empty-failures-section-model",
+      failureIntents: new Set(),
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "succeed first child" },
+          { protocol: "sequential", intent: "succeed second child" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ],
+      recordedRequests: planRequests
+    });
+
+    await run({
+      intent: "Avoid happy-path prompt noise.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 2
+    });
+
+    const followUpPrompt = planRequests
+      .filter((request) => request.metadata.phase === "plan")[1]
+      ?.messages.find((message) => message.role === "user")?.content ?? "";
+
+    expect(followUpPrompt).not.toContain("## Sub-run failures since last decision");
+  });
+
+  it("excludes synthetic sibling-failed failures from the structured failures section", async () => {
+    const planRequests: ModelRequest[] = [];
+    const provider = createFailureContextProvider({
+      id: "synthetic-exclusion-model",
+      failureIntents: new Set(["fail first child"]),
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "fail first child" },
+          { protocol: "sequential", intent: "queued synthetic sibling" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ],
+      recordedRequests: planRequests
+    });
+
+    await run({
+      intent: "Exclude synthetic failure bookkeeping.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 1
+    });
+
+    const followUpPrompt = planRequests
+      .filter((request) => request.metadata.phase === "plan")[1]
+      ?.messages.find((message) => message.role === "user")?.content ?? "";
+    const failures = extractFailuresSection(followUpPrompt);
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      intent: "fail first child",
+      error: {
+        code: "provider-timeout",
+        message: "fail first child exploded"
+      },
+      partialCost: { usd: 0.003 }
+    });
+  });
+
+  it("abort short-circuit skips the next plan turn after a real child failure", async () => {
+    const planRequests: ModelRequest[] = [];
+    const provider = createFailureContextProvider({
+      id: "abort-short-circuit-model",
+      failureIntents: new Set(["fail first child"]),
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "fail first child" },
+          { protocol: "sequential", intent: "succeed second child" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ],
+      recordedRequests: planRequests
+    });
+
+    await run({
+      intent: "Abort after child failure.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 2,
+      onChildFailure: "abort"
+    });
+
+    expect(planRequests.filter((request) => request.metadata.phase === "plan")).toHaveLength(1);
+  });
+
+  it("continue mode is unaffected and carries child failures into the next prompt", async () => {
+    const planRequests: ModelRequest[] = [];
+    const provider = createFailureContextProvider({
+      id: "continue-unaffected-model",
+      failureIntents: new Set(["fail first child"]),
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "fail first child" },
+          { protocol: "sequential", intent: "succeed second child" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ],
+      recordedRequests: planRequests
+    });
+
+    await run({
+      intent: "Continue after child failure.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 2
+    });
+
+    const planPrompts = planRequests.filter((request) => request.metadata.phase === "plan");
+    expect(planPrompts).toHaveLength(2);
+    expect(planPrompts[1]?.messages.find((message) => message.role === "user")?.content).toContain(
+      "## Sub-run failures since last decision"
+    );
+  });
+
+  it("abort short-circuit snapshots the first observed triggering failure", async () => {
+    const planRequests: ModelRequest[] = [];
+    const provider = createFailureContextProvider({
+      id: "abort-first-triggering-failure-model",
+      failureIntents: new Set(["fail first child", "fail second child"]),
+      planResponses: [
+        delegateBlock([
+          { protocol: "sequential", intent: "fail first child" },
+          { protocol: "sequential", intent: "fail second child" }
+        ]),
+        PARTICIPATE_OUTPUT
+      ],
+      recordedRequests: planRequests
+    });
+
+    const result = await run({
+      intent: "Snapshot first child failure.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ],
+      maxConcurrentChildren: 2,
+      onChildFailure: "abort"
+    });
+
+    const firstFailedEvent = result.trace.events.find((event) => event.type === "sub-run-failed");
+    expect(result.trace).toHaveProperty("triggeringFailureForAbortMode");
+    expect((result.trace as unknown as { triggeringFailureForAbortMode: { intent: string } }).triggeringFailureForAbortMode.intent).toBe(
+      "fail first child"
+    );
+    expect((result.trace as unknown as { triggeringFailureForAbortMode: { childRunId: string } }).triggeringFailureForAbortMode.childRunId).toBe(
+      firstFailedEvent?.type === "sub-run-failed" ? firstFailedEvent.childRunId : undefined
+    );
+  });
+
   it("fans out delegate arrays and queues delegates beyond maxConcurrentChildren", async () => {
     const provider = createScriptedCoordinatorProvider({
       id: "delegate-fanout-queue-model",

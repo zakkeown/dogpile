@@ -853,6 +853,76 @@ describe("maxConcurrentChildren option", () => {
   });
 });
 
+describe("onChildFailure option", () => {
+  it("accepts continue and abort on createEngine", () => {
+    expect(() =>
+      createEngine({
+        ...validEngineOptions(),
+        onChildFailure: "continue"
+      })
+    ).not.toThrow();
+    expect(() =>
+      createEngine({
+        ...validEngineOptions(),
+        onChildFailure: "abort"
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects invalid onChildFailure on createEngine with invalid-configuration", () => {
+    expectInvalidConfiguration(
+      () =>
+        createEngine({
+          ...validEngineOptions(),
+          onChildFailure: "explode" as "continue"
+        }),
+      "onChildFailure"
+    );
+  });
+
+  it("rejects invalid per-run onChildFailure with invalid-configuration", () => {
+    const engine = createEngine(validEngineOptions());
+    expectInvalidConfiguration(
+      () => engine.run("Validate child failure mode.", { onChildFailure: "explode" as "continue" }),
+      "options.onChildFailure"
+    );
+  });
+
+  it("resolves onChildFailure with per-run overriding engine overriding default", async () => {
+    const engineAbort = createEngine({
+      ...validEngineOptions(),
+      protocol: { kind: "sequential", maxTurns: 1 },
+      onChildFailure: "abort"
+    });
+    const engineDefault = createEngine({
+      ...validEngineOptions(),
+      protocol: { kind: "sequential", maxTurns: 1 }
+    });
+
+    await expect(engineAbort.run("Run with per-run continue.", { onChildFailure: "continue" })).resolves.toMatchObject({
+      output: expect.any(String)
+    });
+    await expect(engineAbort.run("Run with engine abort.")).resolves.toMatchObject({
+      output: expect.any(String)
+    });
+    await expect(engineDefault.run("Run with default continue.")).resolves.toMatchObject({
+      output: expect.any(String)
+    });
+  });
+
+  it("locks onChildFailure as a public engine and per-run option", () => {
+    const _engineOptionsLock: EngineOptions = {
+      ...validEngineOptions(),
+      onChildFailure: "abort"
+    };
+    const _runOptionsLock = {
+      onChildFailure: "continue"
+    } satisfies Parameters<ReturnType<typeof createEngine>["run"]>[1];
+    expect(_engineOptionsLock.onChildFailure).toBe("abort");
+    expect(_runOptionsLock.onChildFailure).toBe("continue");
+  });
+});
+
 describe("BUDGET-02 defaultSubRunTimeoutMs validation + public-surface lock", () => {
   it.each([
     { name: "negative", value: -1 },
