@@ -67,13 +67,30 @@ Historical milestone log for `@dogpile/sdk`. Reconstructed from `CHANGELOG.md` o
 
 ## v0.3.1 — Logger Seam, Retry Wrapper, Internal Vercel Adapter
 
-**Shipped (current).** Pre-GSD.
+**Shipped.** Pre-GSD.
 
 - Structured logging seam at `@dogpile/sdk/runtime/logger` (also re-exported from package root). Adds `Logger`, `noopLogger`, `consoleLogger`, `loggerFromEvents`. No new event variants. Logger throws routed to logger's own `error` channel.
 - `withRetry(provider, policy)` at `@dogpile/sdk/runtime/retry`. Provider-neutral, opt-in transient-failure retry. Honors `error.detail.retryAfterMs`. Short-circuits on `AbortSignal`. Streaming forwarded unchanged. Default retries: `provider-rate-limited`, `provider-timeout`, `provider-unavailable`.
 - Internalized Vercel AI adapter (`src/providers/vercel-ai.ts` → `src/internal/vercel-ai.ts`) so `ai` does not become a peer dep. Was never in `package.json#exports` or `#files`.
 - `createRunId` no longer falls back to `Date.now`-based id when `globalThis.crypto.randomUUID` is missing — throws `DogpileError({ code: "invalid-configuration" })`.
 - Three plain `Error` throws in `src/runtime/tools.ts` upgraded to `DogpileError` with stable codes (`invalid-configuration` / `provider-invalid-response`).
+
+## v0.4.0 — Recursive Coordination
+
+**Shipped 2026-05-01.** Phases 1-5, 22 plans, 27/27 requirements complete.
+
+- Added the `delegate` decision variant on the existing `coordinator` protocol so agents can dispatch whole child missions without adding a fifth protocol.
+- Embedded child run traces in parent `sub-run-completed` events and taught replay/accounting to walk recursive traces without provider calls.
+- Propagated parent abort, timeout ceilings, costs, and token accounting through nested children while keeping termination floors scoped per protocol instance.
+- Added provider `metadata.locality`, OpenAI-compatible locality detection, bounded child fan-out through `maxConcurrentChildren`, queued child events, and local-provider concurrency clamping.
+- Added live stream child-event bubbling with `parentRunIds`, parent cancel drain semantics, structured child-failure context for coordinator recovery, and terminal child-error discrimination.
+- Published recursive coordination docs, exhaustive reference docs, a runnable recursive coordination example, README/examples index links, and the v0.4.0 changelog.
+
+**Archive:** `.planning/milestones/v0.4.0-ROADMAP.md`, `.planning/milestones/v0.4.0-REQUIREMENTS.md`
+
+**Release artifacts:** tag `v0.4.0`, GitHub Release `https://github.com/bubstack/dogpile/releases/tag/v0.4.0`, npm `@dogpile/sdk@0.4.0`.
+
+**Known deferred items:** no open debug/todo artifacts were recorded in planning state; no separate `.planning/v0.4.0-MILESTONE-AUDIT.md` was present at archive time.
 
 ---
 
