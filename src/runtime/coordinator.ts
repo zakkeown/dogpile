@@ -19,6 +19,7 @@ import type {
   RunResult,
   SubRunBudgetClampedEvent,
   SubRunFailedEvent,
+  SubRunQueuedEvent,
   SubRunParentAbortedEvent,
   TerminationCondition,
   TerminationStopRecord,
@@ -138,6 +139,45 @@ interface CoordinatorRunOptions {
  */
 const MAX_DISPATCH_PER_TURN = 8;
 
+interface Semaphore {
+  acquire(): Promise<void>;
+  release(): void;
+  readonly inFlight: number;
+  readonly queued: number;
+}
+
+function createSemaphore(maxConcurrent: number): Semaphore {
+  let inFlight = 0;
+  const waiters: Array<() => void> = [];
+  return {
+    acquire(): Promise<void> {
+      if (inFlight < maxConcurrent) {
+        inFlight += 1;
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        waiters.push(() => {
+          inFlight += 1;
+          resolve();
+        });
+      });
+    },
+    release(): void {
+      inFlight -= 1;
+      const next = waiters.shift();
+      if (next !== undefined) {
+        next();
+      }
+    },
+    get inFlight() {
+      return inFlight;
+    },
+    get queued() {
+      return waiters.length;
+    }
+  };
+}
+
 export async function runCoordinator(options: CoordinatorRunOptions): Promise<RunResult> {
   const runId = createRunId();
   const events: RunEvent[] = [];
@@ -235,14 +275,23 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
         });
         totalCost = turnOutcome.totalCost;
 
-        if (turnOutcome.decision === undefined || Array.isArray(turnOutcome.decision) || turnOutcome.decision.type !== "delegate") {
+        if (turnOutcome.decision === undefined) {
           break;
         }
 
-        if (dispatchCount >= MAX_DISPATCH_PER_TURN) {
+        const delegates = Array.isArray(turnOutcome.decision)
+          ? turnOutcome.decision
+          : turnOutcome.decision.type === "delegate"
+            ? [turnOutcome.decision]
+            : [];
+        if (delegates.length === 0) {
+          break;
+        }
+
+        if (dispatchCount + delegates.length > MAX_DISPATCH_PER_TURN) {
           throw new DogpileError({
             code: "invalid-configuration",
-            message: `Coordinator plan turn delegated more than ${MAX_DISPATCH_PER_TURN} times without participating`,
+            message: `Coordinator plan turn delegated ${delegates.length} more children after ${dispatchCount}; max is ${MAX_DISPATCH_PER_TURN}.`,
             retryable: false,
             detail: {
               kind: "delegate-validation",
@@ -252,29 +301,136 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
             }
           });
         }
-        dispatchCount += 1;
 
         const parentDecisionId = String(events.length - 1);
-        const dispatchResult = await dispatchDelegate({
-          decision: turnOutcome.decision,
-          parentDecisionId,
-          parentDecisionArrayIndex: 0,
-          parentDepth: options.currentDepth ?? 0,
-          parentRunId: runId,
-          options,
-          transcript,
-          emit,
-          recordProtocolDecision,
-          // BUDGET-03 / D-01: roll child cost into the parent's closure-local
-          // totalCost accumulator BEFORE the sub-run-completed / sub-run-failed
-          // event is emitted. Parent's next `agent-turn`/`final` event reads
-          // totalCost from this same closure scope, so the recorded event cost
-          // reflects the rolled-up value.
-          recordSubRunCost: (cost: CostSummary): void => {
-            totalCost = addCost(totalCost, cost);
+        const parentDepth = options.currentDepth ?? 0;
+        const decisionMax = delegates.reduce(
+          (max, delegate) => Math.min(max, delegate.maxConcurrentChildren ?? Number.POSITIVE_INFINITY),
+          Number.POSITIVE_INFINITY
+        );
+        const effectiveForTurn = Math.min(
+          options.effectiveMaxConcurrentChildren ?? Number.POSITIVE_INFINITY,
+          decisionMax
+        );
+        const semaphore = createSemaphore(effectiveForTurn);
+        const childRunIds = delegates.map(() => createRunId());
+        const dispatchResults: Array<{ readonly index: number; readonly result: DispatchDelegateResult }> = [];
+        let firstFailureIndex: number | undefined;
+
+        const tasks = delegates.map(async (delegate, index) => {
+          const childRunId = childRunIds[index];
+          if (childRunId === undefined) {
+            throw new Error("missing child run id");
+          }
+          if (semaphore.inFlight >= effectiveForTurn) {
+            const queuedEvent: SubRunQueuedEvent = {
+              type: "sub-run-queued",
+              runId,
+              at: new Date().toISOString(),
+              childRunId,
+              parentRunId: runId,
+              parentDecisionId,
+              parentDecisionArrayIndex: index,
+              protocol: delegate.protocol,
+              intent: delegate.intent,
+              depth: parentDepth + 1,
+              queuePosition: semaphore.queued
+            };
+            emit(queuedEvent);
+            recordProtocolDecision(queuedEvent);
+          }
+
+          await semaphore.acquire();
+          try {
+            if (firstFailureIndex !== undefined) {
+              const partialCost = emptyCost();
+              const partialTrace = buildPartialTrace({
+                childRunId,
+                events: [],
+                startedAtMs: Date.now(),
+                protocol: delegate.protocol,
+                tier: options.tier,
+                modelProviderId: options.model.id,
+                agents: options.agents,
+                intent: delegate.intent,
+                temperature: options.temperature,
+                ...(options.seed !== undefined ? { seed: options.seed } : {})
+              });
+              const failedEvent: SubRunFailedEvent = {
+                type: "sub-run-failed",
+                runId,
+                at: new Date().toISOString(),
+                childRunId,
+                parentRunId: runId,
+                parentDecisionId,
+                parentDecisionArrayIndex: index,
+                error: {
+                  code: "aborted",
+                  message: "Sibling delegate failed; queued delegate never started.",
+                  detail: {
+                    reason: "sibling-failed"
+                  }
+                },
+                partialTrace,
+                partialCost
+              };
+              emit(failedEvent);
+              recordProtocolDecision(failedEvent);
+              dispatchResults.push({
+                index,
+                result: {
+                  nextInput: "",
+                  taggedText: `[sub-run ${childRunId}]: skipped because a sibling delegate failed`,
+                  completedAtMs: Date.now()
+                }
+              });
+              return;
+            }
+            const result = await dispatchDelegate({
+              decision: delegate,
+              childRunId,
+              parentDecisionId,
+              parentDecisionArrayIndex: index,
+              parentDepth,
+              parentRunId: runId,
+              options,
+              transcript,
+              emit,
+              recordProtocolDecision,
+              recordSubRunCost: (cost: CostSummary): void => {
+                totalCost = addCost(totalCost, cost);
+              }
+            });
+            dispatchResults.push({ index, result });
+          } catch (error) {
+            firstFailureIndex ??= index;
+            if (delegates.length === 1) {
+              throw error;
+            }
+            dispatchResults.push({
+              index,
+              result: {
+                nextInput: "",
+                taggedText: `[sub-run ${childRunId} failed]: ${error instanceof Error ? error.message : String(error)}`,
+                completedAtMs: Date.now()
+              }
+            });
+          } finally {
+            semaphore.release();
           }
         });
-        dispatchInput = dispatchResult.nextInput;
+        const settled = await Promise.allSettled(tasks);
+        const firstRejected = settled.find((result) => result.status === "rejected");
+        if (firstRejected?.status === "rejected" && delegates.length === 1) {
+          throw firstRejected.reason;
+        }
+
+        dispatchResults.sort((a, b) => a.result.completedAtMs - b.result.completedAtMs);
+        const taggedResults = dispatchResults.map((entry) => entry.result.taggedText).join("\n\n");
+        const coordinatorAgent = options.agents[0] ?? { id: "coordinator", role: "coordinator" };
+        const baseInput = buildCoordinatorPlanInput(options.intent, coordinatorAgent);
+        dispatchInput = `${baseInput}\n\n${taggedResults}\n\nUsing the sub-run results above, decide the next step (participate or delegate).`;
+        dispatchCount += delegates.length;
       }
       stopIfNeeded();
     }
@@ -793,6 +949,7 @@ function responseCost(response: ModelResponse): CostSummary {
 
 interface DispatchDelegateOptions {
   readonly decision: DelegateAgentDecision;
+  readonly childRunId?: string;
   readonly parentDecisionId: string;
   readonly parentDecisionArrayIndex: number;
   readonly parentDepth: number;
@@ -816,6 +973,16 @@ interface DispatchDelegateOptions {
 
 interface DispatchDelegateResult {
   readonly nextInput: string;
+  readonly taggedText: string;
+  readonly completedAtMs: number;
+}
+
+interface DispatchedChild {
+  readonly childRunId: string;
+  readonly controller: AbortController;
+  readonly removeParentListener: (() => void) | undefined;
+  /** STREAM-03 hook (Phase 4). Reserved; do not use. */
+  readonly streamHandle?: never;
 }
 
 /**
@@ -841,7 +1008,7 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
     assertDepthWithinLimit(input.parentDepth, options.effectiveMaxDepth);
   }
 
-  const childRunId = createRunId();
+  const childRunId = input.childRunId ?? createRunId();
   const recursive = decision.protocol === "coordinator";
   const decisionTimeoutMs = decision.budget?.timeoutMs;
   const parentDeadlineMs = options.parentDeadlineMs;
@@ -964,6 +1131,11 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
       };
     }
   }
+  const dispatchedChild: DispatchedChild = {
+    childRunId,
+    controller: childController,
+    removeParentListener: removeParentAbortListener
+  };
 
   const childOptions = {
     intent: decision.intent,
@@ -974,7 +1146,7 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
     tools: options.tools,
     temperature: options.temperature,
     ...(childTimeoutMs !== undefined ? { budget: { timeoutMs: childTimeoutMs } } : {}),
-    signal: childController.signal,
+    signal: dispatchedChild.controller.signal,
     emit: teedEmit,
     currentDepth: input.parentDepth + 1,
     ...(options.effectiveMaxDepth !== undefined ? { effectiveMaxDepth: options.effectiveMaxDepth } : {}),
@@ -1128,7 +1300,9 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
     role: "coordinator"
   });
   return {
-    nextInput: `${baseInput}\n\n${taggedText}\n\nUsing the sub-run result above, decide the next step (participate or delegate).`
+    nextInput: `${baseInput}\n\n${taggedText}\n\nUsing the sub-run result above, decide the next step (participate or delegate).`,
+    taggedText,
+    completedAtMs: Date.now()
   };
 }
 

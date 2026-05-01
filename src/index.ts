@@ -190,6 +190,7 @@ export type {
   SubRunCompletedEvent,
   SubRunFailedEvent,
   SubRunParentAbortedEvent,
+  SubRunQueuedEvent,
   SubRunStartedEvent,
   TerminationCondition,
   TerminationDecision,
