@@ -75,6 +75,23 @@ from accidental self-inflicted overload.
 - The clamp-emitted flag is scoped to the individual run, so concurrent runs do not suppress each other's `sub-run-concurrency-clamped` event.
 - New `ReplayTraceProtocolDecisionType` literal `mark-sub-run-concurrency-clamped` pairs with `sub-run-concurrency-clamped` events.
 
+### Added — Recursive coordination: streaming and child error escalation (Phase 4)
+
+The STREAM-* and ERROR-* requirements ship together so live consumers can demux
+child activity, parent cancellation closes delegated work, and terminal child
+failures surface as stable public `DogpileError` instances.
+
+- **`parentRunIds: readonly string[]` on stream events.** Every `StreamLifecycleEvent` and `StreamOutputEvent` variant accepts an optional root-to-immediate-parent ancestry chain for live bubbled child events. The chain is not persisted into parent `RunResult.events`; `replayStream()` reconstructs it from embedded child traces.
+- **New aborted lifecycle event.** Parent streams emit `{ type: "aborted", runId, at, reason: "parent-aborted" | "timeout", detail? }` before terminal `error` events on abort paths, including parent-aborted-after-completion cases with no synthetic child failure to drain.
+- **`onChildFailure?: "continue" | "abort"` config option.** Engine-level and per-run surfaces accept the option; default `"continue"` preserves coordinator retry/redirect behavior. `"abort"` skips the follow-up plan turn after the first real child failure and re-throws the snapshotted triggering failure.
+- **Optional `detail.source?: "provider" | "engine"` on `provider-timeout` errors.** OpenAI-compatible HTTP timeout responses set `"provider"`; child engine deadlines set `"engine"`. Backwards-compat: absent `detail.source` means `"provider"`. Parent-budget propagation remains `code: "aborted"` with `detail.reason: "timeout"`.
+- **Coordinator prompt structured failure roster.** The next coordinator plan prompt includes `## Sub-run failures since last decision` with a JSON array of real child failures from the latest dispatch wave: `{ childRunId, intent, error: { code, message, detail.reason? }, partialCost: { usd } }`. Synthetic `sibling-failed` / `parent-aborted` bookkeeping failures and `partialTrace` are intentionally excluded.
+- **Cancel-during-fan-out drain.** `StreamHandle.cancel()` drains active children before terminal stream error: in-flight children emit synthetic `sub-run-failed` with `error.detail.reason: "parent-aborted"` and queued children retain `sibling-failed`; late events from drained children are suppressed at the parent stream boundary.
+
+### Changed
+
+- **Terminate-without-final throw rule clarified.** "Original DogpileError unwrapped" means the child's own thrown `DogpileError`, not a wrapper, and not the first failure chronologically. Budget and abort-mode terminal paths re-throw the last real child failure by event order, excluding synthetic sibling-failed and parent-aborted entries. Explicit cancel/abort wins and throws the cancel error verbatim.
+
 #### Public-surface tests
 
 - `src/tests/event-schema.test.ts` now locks 17 run event variants, including `sub-run-queued` and `sub-run-concurrency-clamped`.
