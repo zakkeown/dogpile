@@ -41,6 +41,7 @@ import {
   resolveOnChildFailure,
   tierTemperature
 } from "./defaults.js";
+import { computeHealth, DEFAULT_HEALTH_THRESHOLDS } from "./health.js";
 import { runSequential } from "./sequential.js";
 import { runShared } from "./shared.js";
 import {
@@ -729,7 +730,8 @@ async function runNonStreamingProtocol(options: NonStreamingProtocolOptions): Pr
         events
       }),
       eventLog: createRunEventLog(trace.runId, trace.protocol, events),
-      trace
+      trace,
+      health: computeHealth(trace, DEFAULT_HEALTH_THRESHOLDS)
     };
     const terminalThrow = resolveRuntimeTerminalThrow(runResult.trace, failureInstancesByChildRunId);
     if (terminalThrow) {
@@ -949,7 +951,8 @@ export function replay(trace: Trace): RunResult {
       events: trace.events
     }),
     accounting,
-    cost
+    cost,
+    health: computeHealth(trace, DEFAULT_HEALTH_THRESHOLDS)
   };
 
   if (lastEvent?.type !== "final") {

@@ -597,6 +597,7 @@ export function canonicalizeRunResult(result: RunResult): RunResult {
     cost: canonicalizeSerializable(result.cost),
     ...(result.evaluation !== undefined ? { evaluation: canonicalizeSerializable(result.evaluation) } : {}),
     eventLog,
+    health: canonicalizeSerializable(result.health),
     metadata: canonicalizeSerializable(result.metadata),
     output: result.output,
     ...(result.quality !== undefined ? { quality: canonicalizeSerializable(result.quality) } : {}),
