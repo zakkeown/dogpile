@@ -130,11 +130,7 @@ Plans:
 1. A caller provides a `metricsHook` function on `EngineOptions` and receives a call with named counters (`inputTokens`, `outputTokens`, `costUsd`, `turns`, `durationMs`) once per completed run and once per completed sub-run.
 2. A run configured without `metricsHook` completes with identical result shape, no thrown exceptions, and no counter-allocation overhead.
 3. A throwing `metricsHook` does not propagate the error into the run result — the error is routed to the logger's `error` channel and the run completes normally.
-**Plans:** 3 plans
-Plans:
-- [ ] 10-01-PLAN.md — MetricsHook + RunMetricsSnapshot module + unit tests
-- [ ] 10-02-PLAN.md — Engine wiring: types, RunProtocolOptions, emit hooks, streaming parity
-- [ ] 10-03-PLAN.md — Public-surface lockstep: package.json, package-exports.test.ts, frozen fixture, CHANGELOG, CLAUDE.md
+**Plans:** TBD
 
 ## Progress Table
 
