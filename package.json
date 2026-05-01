@@ -65,6 +65,16 @@
       "import": "./dist/runtime/engine.js",
       "default": "./dist/runtime/engine.js"
     },
+    "./runtime/health": {
+      "types": "./dist/runtime/health.d.ts",
+      "import": "./dist/runtime/health.js",
+      "default": "./dist/runtime/health.js"
+    },
+    "./runtime/introspection": {
+      "types": "./dist/runtime/introspection.d.ts",
+      "import": "./dist/runtime/introspection.js",
+      "default": "./dist/runtime/introspection.js"
+    },
     "./runtime/model": {
       "types": "./dist/runtime/model.d.ts",
       "import": "./dist/runtime/model.js",
@@ -153,7 +163,9 @@
     "src/runtime/decisions.ts",
     "src/runtime/defaults.ts",
     "src/runtime/engine.ts",
+    "src/runtime/health.ts",
     "src/runtime/ids.ts",
+    "src/runtime/introspection.ts",
     "src/runtime/logger.ts",
     "src/runtime/model.ts",
     "src/runtime/provenance.ts",

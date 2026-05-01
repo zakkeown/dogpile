@@ -15,12 +15,22 @@ import {
 } from "@dogpile/sdk/browser";
 import { createOpenAICompatibleProvider as createOpenAICompatibleProviderSubpath } from "@dogpile/sdk/providers/openai-compatible";
 import { createEngine } from "@dogpile/sdk/runtime/engine";
+import {
+  DEFAULT_HEALTH_THRESHOLDS,
+  computeHealth,
+  type HealthThresholds,
+  type RunHealthSummary
+} from "@dogpile/sdk/runtime/health";
+import { queryEvents, type EventQueryFilter } from "@dogpile/sdk/runtime/introspection";
 import * as internalHelpers from "../internal.js";
 import type {
+  AnomalyCode,
   BroadcastProtocolConfig,
+  HealthAnomaly,
   JsonPrimitive,
   ProtocolConfig,
   RunEvent,
+  RunHealthSummary as RootRunHealthSummary,
   SequentialProtocolConfig
 } from "@dogpile/sdk";
 
@@ -1145,7 +1155,9 @@ describe("package exports", () => {
       "src/runtime/decisions.ts",
       "src/runtime/defaults.ts",
       "src/runtime/engine.ts",
+      "src/runtime/health.ts",
       "src/runtime/ids.ts",
+      "src/runtime/introspection.ts",
       "src/runtime/logger.ts",
       "src/runtime/model.ts",
       "src/runtime/provenance.ts",
@@ -1285,6 +1297,16 @@ describe("package exports", () => {
         types: "./dist/runtime/engine.d.ts",
         import: "./dist/runtime/engine.js",
         default: "./dist/runtime/engine.js"
+      },
+      "./runtime/health": {
+        types: "./dist/runtime/health.d.ts",
+        import: "./dist/runtime/health.js",
+        default: "./dist/runtime/health.js"
+      },
+      "./runtime/introspection": {
+        types: "./dist/runtime/introspection.d.ts",
+        import: "./dist/runtime/introspection.js",
+        default: "./dist/runtime/introspection.js"
       },
       "./runtime/model": {
         types: "./dist/runtime/model.d.ts",
@@ -1476,8 +1498,30 @@ describe("package exports", () => {
     const broadcastProtocol: BroadcastProtocolConfig = { kind: "broadcast", maxRounds: 1 };
     const tracePrimitive: JsonPrimitive = "exports-smoke";
     const eventType: RunEvent["type"] = "final";
+    const eventQueryFilter: EventQueryFilter = { type: eventType };
+    const healthThresholds: HealthThresholds = DEFAULT_HEALTH_THRESHOLDS;
+    const anomalyCode: AnomalyCode = "empty-contribution";
+    const healthAnomaly: HealthAnomaly = {
+      code: anomalyCode,
+      severity: "error",
+      value: 0,
+      threshold: 0,
+      agentId: "agent-a"
+    };
+    const healthSummary: RunHealthSummary = {
+      anomalies: [healthAnomaly],
+      stats: {
+        totalTurns: 0,
+        agentCount: 0,
+        budgetUtilizationPct: null
+      }
+    };
+    const rootHealthSummary: RootRunHealthSummary = healthSummary;
+    const queriedEvents = queryEvents([], eventQueryFilter);
 
     expect(typeof createEngine).toBe("function");
+    expect(typeof computeHealth).toBe("function");
+    expect(typeof queryEvents).toBe("function");
     expect(typeof createOpenAICompatibleProvider).toBe("function");
     expect(createOpenAICompatibleProviderSubpath).toBe(createOpenAICompatibleProvider);
     expect(typeof BrowserDogpile.pile).toBe("function");
@@ -1488,5 +1532,8 @@ describe("package exports", () => {
     expect(broadcastProtocol.kind).toBe("broadcast");
     expect(tracePrimitive).toBe("exports-smoke");
     expect(eventType).toBe("final");
+    expect(queriedEvents).toEqual([]);
+    expect(healthThresholds).toEqual({});
+    expect(rootHealthSummary.anomalies[0]?.code).toBe("empty-contribution");
   });
 });
