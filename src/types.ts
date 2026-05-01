@@ -1,3 +1,5 @@
+import type { DogpileTracer } from "./runtime/tracing.js";
+
 /**
  * Primitive JSON value accepted in serializable trace metadata.
  */
@@ -1883,6 +1885,15 @@ export interface DogpileOptions extends BudgetCostTierOptions {
   /** Optional caller cancellation signal passed to provider-facing model requests. */
   readonly signal?: AbortSignal;
   /**
+   * Optional duck-typed OTEL-compatible tracer. When provided, the SDK emits
+   * spans for run start/end, sub-run start/end, agent-turn start/end, and
+   * model-call start/end with correct parent-child ancestry. When absent the
+   * run completes with zero span overhead — no allocations, no branch cost.
+   * `replay()` and `replayStream()` ignore this field entirely.
+   * See {@link DogpileTracer} in `@dogpile/sdk/runtime/tracing`.
+   */
+  readonly tracer?: DogpileTracer;
+  /**
    * Maximum coordinator → sub-run recursion depth.
    *
    * Defaults to 4. Per-run values can only LOWER the engine ceiling; raising
@@ -1986,6 +1997,15 @@ export interface EngineOptions {
   readonly seed?: string | number;
   /** Optional caller cancellation signal passed to provider-facing model requests. */
   readonly signal?: AbortSignal;
+  /**
+   * Optional duck-typed OTEL-compatible tracer. When provided, the SDK emits
+   * spans for run start/end, sub-run start/end, agent-turn start/end, and
+   * model-call start/end with correct parent-child ancestry. When absent the
+   * run completes with zero span overhead — no allocations, no branch cost.
+   * `replay()` and `replayStream()` ignore this field entirely.
+   * See {@link DogpileTracer} in `@dogpile/sdk/runtime/tracing`.
+   */
+  readonly tracer?: DogpileTracer;
   /**
    * Maximum coordinator → sub-run recursion depth ceiling.
    *

@@ -12,6 +12,8 @@ export { consoleLogger, loggerFromEvents, noopLogger } from "./runtime/logger.js
 export type { Logger, LoggerFromEventsOptions, LogLevel } from "./runtime/logger.js";
 export { DEFAULT_RETRYABLE_DOGPILE_CODES, withRetry } from "./runtime/retry.js";
 export type { RetryAttemptInfo, RetryJitterMode, RetryPolicy } from "./runtime/retry.js";
+export { DOGPILE_SPAN_NAMES } from "./runtime/tracing.js";
+export type { DogpileSpan, DogpileSpanOptions, DogpileTracer } from "./runtime/tracing.js";
 export { DogpileError } from "./types.js";
 export type {
   OpenAICompatibleChatCompletionChoice,
