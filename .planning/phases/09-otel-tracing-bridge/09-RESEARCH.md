@@ -502,22 +502,25 @@ And in `files`:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`TurnEvent.turnNumber` field availability**
    - What we know: D-11 references `dogpile.turn.number`; `TurnEvent` in `src/types/events.ts` shows `agentId`, `role`, `cost` but no `turnNumber` field.
    - What's unclear: Is `turnNumber` present in the actual runtime event? The context references it but the type definition at lines 318-339 doesn't show it explicitly.
    - Recommendation: Planner should verify `TurnEvent` type definition before implementing `dogpile.turn.number` attribute. May need to derive turn number from a counter in the `emit` closure keyed by `agentId`.
+   - **RESOLVED (2026-05-01):** Per D-08 design, `TurnEvent` has no `turnNumber` field — derive `dogpile.turn.number` from a per-agentId counter maintained inside the `emit` closure. Plan 02 already implements this via `agentTurnCounters: Map<string, number>` incremented on the first `model-request` per agentId. No type-shape change needed.
 
 2. **`agentTurnSpans` key — agentId or callId?**
    - What we know: Multiple agents may have concurrent turns in broadcast protocol.
    - What's unclear: Whether `agentId` alone is a stable enough key for concurrent turns, or whether `agentId + turnIndex` is needed.
    - Recommendation: Use a composite key or a per-agentId stack. The emit-based approach in CONTEXT.md specifics uses `agentId` — follow that.
+   - **RESOLVED (2026-05-01):** Per D-08, the agent-turn span opens on the FIRST `model-request` for an agentId and closes on the matching `agent-turn` event. Within a single run, an agent has at most one open turn at a time, so `agentId` is a stable enough key. Plan 02 keys `agentTurnSpans: Map<string, DogpileSpan>` by `agentId` and deletes the entry on close before the next turn for that agentId could open. No composite key needed.
 
 3. **Roadmap SC 4 is incompatible with locked D-01/D-03 — resolve before plan creation**
    - What we know: ROADMAP.md Phase 9 Success Criterion 4 states: "The duck-typed `DogpileTracer` interface ... structurally satisfies any real `@opentelemetry/api@1.9.x` `Tracer` without a shared import." [VERIFIED: Context7 + opentelemetry-js-api/docs/tracing.md] The real `Tracer.startSpan(name, options, context)` passes parent via the third `context` argument; `DogpileSpanOptions.parent` is silently ignored if an OTEL `Tracer` is passed directly. Real `Span.setStatus({code, message?})` uses an object; `DogpileSpan.setStatus(code, message?)` uses positional args. **Structural compatibility fails on both parent linkage and setStatus.**
    - What's unclear: Whether SC 4 should be reinterpreted as "a thin caller-side bridge (WeakMap pattern) structurally satisfies any real OTEL Tracer" — which is achievable — or whether D-03 needs to change `setStatus` signature to accept the OTEL object shape.
    - Recommendation: **Flag to user before plan creation.** The WeakMap bridge approach (documented in Code Examples) fully achieves OTEL integration; SC 4's "without a shared import" is achievable via the bridge. The planner should treat SC 4 as meaning "bridge code does not require sharing internal SDK types" rather than "no bridge code needed at all."
+   - **RESOLVED (2026-05-01):** D-01 and D-03 govern — the duck-typed subset IS the design. ROADMAP SC 4 is interpreted as "no shared SDK type import is required at the boundary" — i.e., callers do NOT import any `@dogpile/sdk` symbol into the type position of their OTEL tracer, and conversely the SDK does NOT import any `@opentelemetry/*` symbol. The thin caller-side WeakMap bridge (RESEARCH.md Pattern 6, Plan 04 docs/developer-usage.md) is the contract surface: callers adapt their real OTEL tracer to `DogpileTracer` in their own code. The SDK's `DogpileTracer` interface is the boundary contract; structural identity with OTEL `Tracer` is explicitly not required and never was achievable given parent-context and setStatus signature differences. This resolves the apparent SC 4 ↔ D-01/D-03 conflict.
 
 ---
 

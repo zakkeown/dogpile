@@ -106,8 +106,21 @@ Plans:
 1. A caller passes an `@opentelemetry/sdk-trace-base` `InMemorySpanExporter`-backed tracer as `options.tracer` and records spans named `dogpile.run`, `dogpile.sub-run`, and `dogpile.agent-turn` after a completed run — no `@opentelemetry/*` import is present in SDK source files under `src/runtime/`.
 2. Spans produced for delegate child runs appear as children of the parent run span, not as disconnected root spans, matching the `parentRunIds` ancestry chain.
 3. A run configured without `options.tracer` completes with identical result shape, no thrown exceptions, and no detectable span allocation overhead.
-4. The duck-typed `DogpileTracer` interface is exported from `/runtime/tracing` and structurally satisfies any real `@opentelemetry/api@1.9.x` `Tracer` without a shared import.
-**Plans:** TBD
+4. The duck-typed `DogpileTracer` interface is exported from `/runtime/tracing` and bridges any real `@opentelemetry/api@1.9.x` `Tracer` without requiring a shared SDK type import at the boundary — i.e., the SDK imports no `@opentelemetry/*` symbol and callers wrap their OTEL tracer with a thin caller-side bridge (see `docs/developer-usage.md`). [RESOLVED 2026-05-01: structural identity with the real OTEL `Tracer` was never achievable given parent-context and `setStatus` signature differences; the WeakMap bridge IS the contract surface.]
+**Plans:** 5 plans
+Plans:
+**Wave 1**
+- [ ] 09-00-PLAN.md — Wave 0: createDelegatingDeterministicProvider in src/testing/ (unblocks Plan 03 OTEL-02 live coordinator-dispatch contract assertion)
+- [ ] 09-01-PLAN.md — Tracing module surface (DogpileTracer/Span/Options + DOGPILE_SPAN_NAMES) + tracer? on EngineOptions/DogpileOptions + devDeps
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 09-02-PLAN.md — Engine span lifecycle: runNonStreamingProtocol + streaming execute() + RunProtocolOptions.parentSpan + replay tracing-free comments
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 09-03-PLAN.md — Public-surface lockstep: /runtime/tracing subpath + package-exports.test.ts + no-otel-imports.test.ts + otel-tracing-contract.test.ts
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 09-04-PLAN.md — Docs lockstep: CHANGELOG + CLAUDE.md invariant + docs/developer-usage.md OTEL section + pnpm run verify
 
 ### Phase 10: Metrics / Counters
 **Goal:** Callers can supply an optional metrics hook on `EngineOptions` and receive named counters (token usage, cost, turn count, duration) at run and sub-run completion; omitting the hook adds zero overhead.

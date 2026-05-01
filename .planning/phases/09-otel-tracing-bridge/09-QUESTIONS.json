@@ -1,0 +1,387 @@
+{
+  "phase": "09-otel-tracing-bridge",
+  "generated_at": "2026-05-01T00:00:00.000Z",
+  "sections": [
+    {
+      "id": "tracer-interface",
+      "title": "DogpileTracer Interface Design",
+      "questions": [
+        {
+          "id": "Q-01",
+          "title": "Span creation style — startSpan vs startActiveSpan",
+          "context": "OTEL API offers two span creation patterns: tracer.startSpan(name, options, context) (explicit context threading) and tracer.startActiveSpan(name, fn) (callback with implicit ambient context). We cannot use AsyncLocalStorage or OTEL's context.active() because browser ESM is a required target. The choice shapes the entire DogpileTracer duck-typed interface.",
+          "options": [
+            {
+              "id": "a",
+              "label": "startSpan — explicit context threading",
+              "description": "DogpileTracer exposes startSpan(name, options?): DogpileSpan. Engine manually threads parent span references through sub-run options. Callers get a simple interface; the SDK handles context plumbing internally."
+            },
+            {
+              "id": "b",
+              "label": "startActiveSpan — callback style with context",
+              "description": "DogpileTracer exposes startActiveSpan<T>(name, options, fn: (span) => T): T. Caller's tracer manages ambient context inside the callback. More OTEL-native but forces async callback wrapping around every protocol run boundary — tricky with the existing runProtocol chain."
+            },
+            {
+              "id": "c",
+              "label": "Custom minimal interface — not tied to OTEL method names",
+              "description": "Define a custom DogpileTracer with beginSpan(name, options?): DogpileSpan and DogpileSpan.end(). Structurally compatible with OTEL via a thin caller-side adapter. Avoids any OTEL API surface bleed but requires callers to write a small wrapper."
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-02",
+          "title": "Parent-child span linking — how does a sub-run span know its parent?",
+          "context": "Sub-runs (delegate decisions in coordinator) receive a childRunId and know their parentRunId from SubRunStartedEvent. The SDK already threads runProtocol(childInput) through the coordinator. Without AsyncLocalStorage, we cannot rely on OTEL's ambient context to automatically link parent → child spans.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Pass parent?: DogpileSpan through startSpan options",
+              "description": "DogpileTracer.startSpan(name, { parent?: DogpileSpan }) — the SDK passes the parent run's active span to the child's startSpan call. The caller's tracer implementation bridges parent.spanContext() to OTEL's native context plumbing. Cleanest duck-typed contract; no Context type required."
+            },
+            {
+              "id": "b",
+              "label": "runId → span map in the tracing adapter",
+              "description": "Keep a Map<runId, DogpileSpan> in a tracing adapter. When a child span is created, look up parentRunIds[0] to find the parent span. Works purely from event data (parentRunId is in SubRunStartedEvent). No threading required through protocol options."
+            },
+            {
+              "id": "c",
+              "label": "Opaque context carrier on DogpileTracer",
+              "description": "Add contextFor(span: DogpileSpan): unknown to DogpileTracer. Engine passes the opaque context back to startSpan(name, options, context). Mirrors OTEL API exactly but adds a second required method and an opaque type round-trip."
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-03",
+          "title": "DogpileSpan methods — what does the span handle expose?",
+          "context": "The DogpileSpan type returned by startSpan is our duck-typed span handle. It must structurally satisfy OTEL's Span interface without importing it. The minimal shape is end() + attribute setting + status. spanContext() is needed only if we pass it for parent-child linking (relevant if Q-02 picks option a).",
+          "options": [
+            {
+              "id": "a",
+              "label": "Minimal: end() + setAttribute() + setStatus()",
+              "description": "interface DogpileSpan { end(): void; setAttribute(key: string, value: string | number | boolean): void; setStatus(code: 'ok' | 'error', message?: string): void; }. Structurally satisfies OTEL Span for the methods we call. Callers need no extra wiring."
+            },
+            {
+              "id": "b",
+              "label": "Minimal + spanContext() for parent linking",
+              "description": "Adds spanContext(): { traceId: string; spanId: string; traceFlags: number } to option a. Required if Q-02 picks option a (passing parent span by reference). Callers whose tracer returns real OTEL spans satisfy this for free."
+            },
+            {
+              "id": "c",
+              "label": "Richer — also recordException() for error events",
+              "description": "Adds recordException(error: { message: string; name?: string }): void to option b. Enables structured exception recording on aborted or budget-stopped runs. Matches OTEL Span.recordException semantics."
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "id": "integration-architecture",
+      "title": "Integration Architecture",
+      "questions": [
+        {
+          "id": "Q-04",
+          "title": "Where does the tracer hook into the engine?",
+          "context": "The engine has two natural integration points: (1) runNonStreamingProtocol — the top-level orchestrator that owns the result; (2) the emit callback — every event flows through it in both streaming and non-streaming paths. A third option is a dedicated tracing adapter that wraps runProtocol at the call sites. All protocols receive emit but don't own lifecycle start/end.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Wrap runNonStreamingProtocol — span starts before runProtocol, ends after result",
+              "description": "runNonStreamingProtocol opens a dogpile.run span, calls runProtocol, ends the span on result or error. Agent-turn spans are opened/closed by intercepting events in the emit callback within the same closure. Single integration point; protocols stay unmodified."
+            },
+            {
+              "id": "b",
+              "label": "Dedicated TracingAdapter class that wraps runProtocol calls",
+              "description": "A TracingAdapter object is created once per engine call. It provides a traced(fn) wrapper used around runProtocol and sub-run dispatches. Coordinator passes runProtocol: tracingAdapter.traced(childInput => ...) so child run spans are automatically managed. Cleaner separation but more indirection."
+            },
+            {
+              "id": "c",
+              "label": "Event-observer — post-emit hook that opens/closes spans from event types",
+              "description": "Each emitted event (role-assignment, agent-turn, sub-run-started, sub-run-completed, final) triggers span lifecycle in an observer function. No wrapping of runProtocol needed. Works for both streaming and non-streaming. Downside: span start/end are decoupled from actual async execution boundaries, so span durations may not perfectly match wall-clock times."
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-05",
+          "title": "tracer field location — EngineOptions only, or also DogpileOptions?",
+          "context": "EngineOptions is the low-level escape hatch; DogpileOptions is the high-level API (Dogpile.pile, run, stream). Users of the high-level API may also want spans. The success criteria only mentions EngineOptions, but DogpileOptions already mirrors most EngineOptions fields (budget, signal, evaluate, seed).",
+          "options": [
+            {
+              "id": "a",
+              "label": "EngineOptions only (success criteria minimum)",
+              "description": "Only createEngine({ tracer }) gets tracing. Dogpile.pile() / run() / stream() callers use createEngine explicitly if they need spans. Reduces surface area. High-level API callers can always convert to createEngine."
+            },
+            {
+              "id": "b",
+              "label": "Both EngineOptions and DogpileOptions (mirrored surface)",
+              "description": "DogpileOptions extends EngineOptions for the tracer field. Callers of Dogpile.pile({ tracer }) get spans without dropping to the engine API. Consistent with how budget, signal, evaluate, etc. are mirrored. Adds to the public surface and changelog."
+            },
+            {
+              "id": "c",
+              "label": "EngineOptions only now, DogpileOptions in a follow-up",
+              "description": "Ship minimal for Phase 9; defer DogpileOptions wiring. Avoids premature surface expansion. Users can file an issue if the high-level API access is needed."
+            }
+          ],
+          "answer": "b",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-06",
+          "title": "Sub-run span context threading — internal options or event-driven map?",
+          "context": "When coordinator dispatches a child run via runProtocol(childInput), the child needs to know its parent span to create a nested child span. Two viable approaches: thread the span through the internal RunProtocolOptions (private type, not exported), or maintain a runId→span map that child runs look up using their parentRunIds.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Thread through RunProtocolOptions (internal type, not public surface)",
+              "description": "Add parentSpan?: DogpileSpan to the internal RunProtocolOptions type. Coordinator passes the active parent span when dispatching child runs. Clean and synchronous — the parent span is known at dispatch time. RunProtocolOptions is internal, not exported, so this isn't a public-surface change."
+            },
+            {
+              "id": "b",
+              "label": "runId → span map maintained by tracing adapter",
+              "description": "The tracing adapter keeps Map<runId, DogpileSpan>. When a sub-run-started event fires, look up the parent by event.parentRunId in the map. No change to RunProtocolOptions. Works purely from the event stream. Slightly less synchronous (depends on event ordering)."
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "id": "span-scope",
+      "title": "Span Scope and Granularity",
+      "questions": [
+        {
+          "id": "Q-07",
+          "title": "Which events get spans in Phase 9?",
+          "context": "Success criteria mandate: dogpile.run, dogpile.sub-run, dogpile.agent-turn. Model-request/response events carry provenance timestamps from Phase 6. Role-assignment, budget-stop, and final events are also in the event stream. Adding model spans would give per-call latency visibility in OTEL backends.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Exactly the three from success criteria: dogpile.run, dogpile.sub-run, dogpile.agent-turn",
+              "description": "Strict Phase 9 scope. Model-request/response spans can be added later. Keeps the tracing adapter small and the public contract narrow."
+            },
+            {
+              "id": "b",
+              "label": "Add dogpile.model-call spans from ModelRequest/ModelResponse events",
+              "description": "Phase 6 added startedAt/completedAt to ModelRequestEvent and ModelResponseEvent. These already carry accurate per-call timing. dogpile.model-call spans would be children of agent-turn spans and give provider latency in traces. Adds 1 span type beyond success criteria."
+            },
+            {
+              "id": "c",
+              "label": "Add dogpile.model-call + dogpile.tool-call spans",
+              "description": "Full span coverage: run → sub-run → agent-turn → model-call → tool-call. Gives complete execution visibility. Significantly more surface area. Likely better suited for Phase 10 or its own slice."
+            }
+          ],
+          "answer": "b",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-08",
+          "title": "Agent-turn span timing — what does the span boundary cover?",
+          "context": "A TurnEvent is emitted when an agent completes its turn. The turn includes: sending the prompt (ModelRequestEvent with startedAt from Phase 6), receiving the response (ModelResponseEvent with completedAt), and processing the decision. The span timing could use these timestamps or simply track when the event arrives in the emit callback.",
+          "options": [
+            {
+              "id": "a",
+              "label": "agent-turn span: from first model-request startedAt to TurnEvent at timestamp",
+              "description": "Most accurate wall-clock for agent work. Uses provenance timestamps from Phase 6. The span duration = provider call latency + decision processing time. Start time extracted from the model-request event that begins the turn."
+            },
+            {
+              "id": "b",
+              "label": "agent-turn span: simple async boundary (emit callback clock)",
+              "description": "Open span when agent-turn event is received, close after event is emitted. Simpler — no timestamp archaeology or event correlation. Less accurate but sufficient for relative timing comparisons."
+            },
+            {
+              "id": "c",
+              "label": "agent-turn span: entire agent lifecycle from role-assignment to turn completion",
+              "description": "For each agent, open span at role-assignment event, close at TurnEvent. Covers wait time if agents queue. Requires correlating role-assignment to TurnEvent by agentId across potentially many events."
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-09",
+          "title": "Failed sub-run span — does a sub-run-failed event get its own span?",
+          "context": "The coordinator emits sub-run-failed when a child run throws. SubRunFailedEvent includes a partial trace and structured error. The parent run may continue (onChildFailure: 'continue') or abort. The failed child run has its own runId. Sub-run-started is always emitted before sub-run-failed.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Yes — sub-run-failed gets a dogpile.sub-run span with ERROR status",
+              "description": "Open a dogpile.sub-run span on sub-run-started, close it with error status on sub-run-failed. Gives OTEL backends visibility into which sub-runs failed. Consistent with 'every sub-run gets a span' semantics."
+            },
+            {
+              "id": "b",
+              "label": "Yes — but only set ERROR status on the parent run span, not a separate child span",
+              "description": "Parent dogpile.run span gets an error attribute when a child fails. No separate span for the failed child. Simpler but loses granularity in OTEL traces for fan-out coordinator patterns."
+            },
+            {
+              "id": "c",
+              "label": "No — defer failed sub-run spans to a future phase",
+              "description": "Phase 9 only creates spans for completed sub-runs (sub-run-completed events). Failed sub-runs are noted as an attribute on the parent run span. Reduces edge-case complexity."
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "id": "span-attributes",
+      "title": "Span Attributes and Data",
+      "questions": [
+        {
+          "id": "Q-10",
+          "title": "dogpile.run span attributes — what data goes on the root run span?",
+          "context": "Each RunResult trace has: runId, intent, protocol, tier, agentCount, totalCost (after completion). The run span is open for the duration of the entire run so end-state attributes (cost, outcome) can be set at end() time via setAttribute before calling span.end().",
+          "options": [
+            {
+              "id": "a",
+              "label": "Minimal: dogpile.run.id, dogpile.run.protocol, dogpile.run.tier",
+              "description": "Just the stable pre-run attributes. No intent (may contain sensitive data). No cost (requires parsing at end). Callers who need more can add attributes via their tracer's startSpan options."
+            },
+            {
+              "id": "b",
+              "label": "Standard: add dogpile.run.agent_count, dogpile.run.outcome, dogpile.run.cost_usd",
+              "description": "Adds outcome (completed/budget-stopped/aborted), agent count, and total cost USD as end-time attributes. Useful for span-level cost dashboards and alerting. Cost and outcome set at span.end() time."
+            },
+            {
+              "id": "c",
+              "label": "Rich: also add dogpile.run.intent (truncated), turn_count, input/output tokens",
+              "description": "Full observability attributes including a truncated intent string (first 200 chars), total turn count, and token breakdown. Most useful in OTEL backends but may expose user intent. Caller can filter/redact on their exporter."
+            }
+          ],
+          "answer": "c",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-11",
+          "title": "dogpile.agent-turn span attributes — what identifies the turn?",
+          "context": "TurnEvent carries: runId, agentId, turnNumber (1-indexed), and via Phase 6 provenance: modelId, callId. TurnEvent also has cost (costUsd for that turn). All of these are available at event emit time without any additional lookups.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Minimal: dogpile.agent.id, dogpile.turn.number",
+              "description": "Just agent identity and turn position. Enough to correlate spans with trace events. No cost or model data."
+            },
+            {
+              "id": "b",
+              "label": "Standard: add dogpile.agent.role, dogpile.model.id, dogpile.turn.cost_usd",
+              "description": "Role identifies agent function (architect, reviewer, etc.). Model id shows which model handled the turn. Cost per turn enables OTEL-level cost attribution. All available from TurnEvent and provenance events."
+            },
+            {
+              "id": "c",
+              "label": "Rich: also add token counts per turn (input_tokens, output_tokens)",
+              "description": "Full per-turn token breakdown on the span. Requires correlating ModelResponseEvent token data with the TurnEvent. Enables per-turn token dashboards in OTEL backends."
+            }
+          ],
+          "answer": "c",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "id": "error-and-edge-cases",
+      "title": "Error Handling and Edge Cases",
+      "questions": [
+        {
+          "id": "Q-12",
+          "title": "Span status on failure — budget-stop, abort, provider error",
+          "context": "A run can end in three non-success states: (1) budget-stop (BudgetStopEvent emitted, no FinalEvent); (2) user abort (AbortSignal fired); (3) provider error (DogpileError thrown). Each results in the root dogpile.run span being ended. OTEL span status is either OK or ERROR.",
+          "options": [
+            {
+              "id": "a",
+              "label": "ERROR only for thrown exceptions; budget-stop = OK",
+              "description": "Budget-stop is a normal termination — the run completed by design. Only unexpected throws set ERROR status. Aligns with the 'budget-stop is not an error' semantics in the existing error types."
+            },
+            {
+              "id": "b",
+              "label": "ERROR for abort and provider errors; budget-stop = OK with termination_reason attribute",
+              "description": "Same as option a but adds dogpile.run.termination_reason attribute on budget-stop (e.g., 'usd-cap', 'turn-cap'). Gives dashboards the ability to filter on termination type without marking budget-stops as errors."
+            },
+            {
+              "id": "c",
+              "label": "ERROR for all three — any non-completed outcome sets ERROR status",
+              "description": "Simplest rule: if outcome !== 'completed', span status = ERROR. Callers can filter in their OTEL backend. May produce noisy error dashboards for runs that legitimately hit budget caps."
+            }
+          ],
+          "answer": "b",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-13",
+          "title": "Streaming — do stream() runs emit spans?",
+          "context": "stream() uses a different code path from run(). Events are emitted progressively as subscribers receive them. The run span would need to remain open until the StreamHandle is finalized or cancelled. The streaming path in engine.ts is separate from runNonStreamingProtocol.",
+          "options": [
+            {
+              "id": "a",
+              "label": "Yes — stream() emits the same span types as run()",
+              "description": "Full parity. dogpile.run span is opened at stream start, closed when the final event is emitted or on cancel. Agent-turn and sub-run spans work identically. Requires wiring tracing into the streaming code path as well."
+            },
+            {
+              "id": "b",
+              "label": "No — streaming deferred; only run() emits spans in Phase 9",
+              "description": "Success criteria only mention 'a completed run' in the verification scenario. Defer streaming tracing to Phase 10 or a follow-up slice. Reduces Phase 9 scope and keeps the streaming path clean."
+            },
+            {
+              "id": "c",
+              "label": "Partial — stream() emits a dogpile.run span but not sub-spans",
+              "description": "A root run span for stream() gives basic latency visibility without the complexity of tracking sub-spans in a streaming context. Sub-spans deferred."
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        },
+        {
+          "id": "Q-14",
+          "title": "Replay — should replay() / replayStream() emit spans?",
+          "context": "replay() re-synthesizes a RunResult from a stored Trace without calling the provider. The events already have timestamps from the original run. If a caller passes a tracer to an engine used for replay, should it emit spans from historical timestamps? Or should replay be a no-op for tracing?",
+          "options": [
+            {
+              "id": "a",
+              "label": "No — replay() is tracing-free; tracer on the engine is ignored for replay calls",
+              "description": "Replay is deterministic re-computation, not a live run. Emitting spans from historical timestamps would confuse OTEL backends. Explicitly document that tracer does not apply to replay."
+            },
+            {
+              "id": "b",
+              "label": "Yes — replay() emits spans with historical timestamps from the stored trace",
+              "description": "OTEL allows setting span start/end times explicitly. Replay could emit spans with original timestamps to reconstruct historical traces in OTEL backends. Useful for audit correlation but unusual and complex."
+            },
+            {
+              "id": "c",
+              "label": "Caller's choice — if tracer is on engine, it fires for replay too; no special behavior",
+              "description": "If a tracer is on the engine, it fires for replay too. Document this and let callers opt-in by only passing a tracer to engines they use for live runs. No special gating in the SDK."
+            }
+          ],
+          "answer": "a",
+          "chat_more": "",
+          "status": "answered"
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "total": 14,
+    "answered": 14,
+    "chat_more": 0,
+    "remaining": 0
+  }
+}
