@@ -232,7 +232,7 @@ const completedAt = trace.finalOutput.completedAt;
 
 ### Pattern 5: Frozen Fixture Test Structure (from provenance-shape.test.ts)
 
-**What:** Load a JSON fixture and compare key/type shape against a live run output. Do not deepEqual raw values (timestamps differ); compare structural shape only.
+**What:** Load a JSON fixture via `readFile` + `JSON.parse` and compare key/type shape against a live run output. Do not deepEqual raw values (timestamps differ); compare structural shape only.
 
 **When to use:** `src/tests/audit-record-shape.test.ts`
 
@@ -249,23 +249,42 @@ import { createDeterministicModelProvider } from "../internal.js";
 const fixturePath = join(/* repo root */, "src/tests/fixtures/audit-record-v1.json");
 
 // Generate a coordinator run to get agentCount > 1, then:
-// expect(Object.keys(live)).toEqual(Object.keys(saved))
+// expect(Object.keys(live)).toEqual(Object.keys(saved))   // ORDER-SENSITIVE — see Pitfall 8
 // expect(typeShape(live)).toEqual(typeShape(saved))
 // expect(saved).toEqual(expect.objectContaining({ auditSchemaVersion: "1", runId: expect.any(String), ... }))
 ```
 
-For `audit-record-v1.type-check.ts`:
+For `audit-record-v1.type-check.ts`, bare JSON imports are NOT available in this project (tsconfig uses `moduleResolution: "Bundler"`, `verbatimModuleSyntax: true`, no `resolveJsonModule`). Use an inline object that mirrors the fixture, with a `satisfies AuditRecord` assertion:
 
 ```typescript
-// Source: CONTEXT.md D-12 pattern
+// Source: CONTEXT.md D-12 pattern — adapted for this project's tsconfig
 import type { AuditRecord } from "@dogpile/sdk/runtime/audit";
-import fixture from "./audit-record-v1.json" assert { type: "json" };
 
-// Compile-time assertion — this file is never imported at runtime
-const _: AuditRecord = fixture satisfies AuditRecord;
+// Inline object mirrors audit-record-v1.json exactly.
+// Update this object whenever the fixture changes.
+// This file is never imported at runtime — it exists only for tsc --noEmit coverage.
+const _fixture = {
+  auditSchemaVersion: "1",
+  runId: "audit-record-fixture-run-id",
+  intent: "Test audit record shape",
+  startedAt: "2026-05-01T00:00:00.000Z",
+  completedAt: "2026-05-01T00:00:01.000Z",
+  protocol: "coordinator",
+  tier: "balanced",
+  modelProviderId: "audit-fixture-provider",
+  agentCount: 2,
+  turnCount: 3,
+  outcome: { status: "completed" },
+  cost: { usd: 0.0003, inputTokens: 21, outputTokens: 12 },
+  agents: [
+    { id: "agent-1", role: "planner", turnCount: 2 },
+    { id: "agent-2", role: "executor", turnCount: 1 },
+  ],
+  childRunIds: ["child-run-abc"],
+} satisfies AuditRecord;
 ```
 
-This file must be included in `tsconfig.json` include paths (or `tsconfig.build.json` exclude) so `tsc --noEmit` covers it during `pnpm run typecheck`.
+This file is covered by `tsconfig.json`'s `"include": ["src/**/*.ts"]` — no additional config needed.
 
 ### Anti-Patterns to Avoid
 
@@ -274,6 +293,7 @@ This file must be included in `tsconfig.json` include paths (or `tsconfig.build.
 - **Using `[]` for empty childRunIds:** With `exactOptionalPropertyTypes`, setting `childRunIds: []` and `childRunIds: undefined` are different. When no sub-runs exist, the field must be absent entirely. Use the conditional spread pattern.
 - **Using `CostSummary` directly in AuditRecord:** D-07 specifies an inline `AuditCost` type that omits `totalTokens`. Import `CostSummary` in the implementation body for computation, but declare `AuditCost` as a standalone interface in `audit.ts`.
 - **Counting BroadcastEvent as a turn:** BroadcastEvent is a round barrier that groups TurnEvents already emitted. Counting both double-counts. Only count `TurnEvent` (type `"agent-turn"`) for `turnCount`.
+- **Bare JSON import in type-check.ts:** This project's tsconfig (`moduleResolution: "Bundler"`, `verbatimModuleSyntax: true`, no `resolveJsonModule`) does not support `import fixture from "./file.json"`. Use an inline object instead.
 
 ## Don't Hand-Roll
 
@@ -319,7 +339,9 @@ This file must be included in `tsconfig.json` include paths (or `tsconfig.build.
 
 ### Pitfall 6: type-check.ts Must Be in TypeScript's Scope
 **What goes wrong:** `audit-record-v1.type-check.ts` is not covered by `tsc --noEmit` and the `satisfies` assertion never runs.
-**How to avoid:** Verify `tsconfig.json` `include` glob covers `src/tests/fixtures/`. If it doesn't, either add the path or import the type-check file from the shape test. Confirm before merging.
+**How to avoid:** `tsconfig.json` `include` is `"src/**/*.ts"` which covers `src/tests/fixtures/` — the file is in scope by default. No additional configuration needed. Confirm with `pnpm run typecheck` after creating the file.
+
+[VERIFIED: tsconfig.json line 18: `"include": ["src/**/*.ts"]`]
 
 ### Pitfall 7: BroadcastEvent Double-Count for turnCount
 **What goes wrong:** Counting both `TurnEvent` and `BroadcastEvent` for `turnCount`. In a broadcast protocol, each agent contributes one `TurnEvent` per round; `BroadcastEvent` is the aggregate barrier. Counting both would produce 2x the actual turn count.
@@ -327,6 +349,17 @@ This file must be included in `tsconfig.json` include paths (or `tsconfig.build.
 **How to avoid:** Count only `TurnEvent` (type `"agent-turn"`). BroadcastEvent.contributions.length equals the number of TurnEvents per round — they are not additive.
 
 [VERIFIED: src/types/events.ts BroadcastEvent lines 387–402, BroadcastContribution lines 341–366, TurnEvent lines 318–339]
+
+### Pitfall 8: Fixture Key Order Must Match Implementation Output Order
+**What goes wrong:** `expect(Object.keys(live)).toEqual(Object.keys(saved))` fails because the implementation assembles the return object with fields in a different order than the fixture JSON.
+**Why it happens:** `Object.keys` comparison is order-sensitive. The fixture JSON defines the canonical field order. If implementation builds the return object in a different order, the key comparison fails even though all fields are present.
+**How to avoid:** The return object in `createAuditRecord` must assemble fields in the exact order they appear in `audit-record-v1.json`. Use the fixture JSON field order as the specification for the return statement key order.
+**Warning signs:** Key comparison test fails but `objectContaining` assertions pass — mismatch is in order, not presence.
+
+### Pitfall 9: agents Array Ordering is Non-Deterministic Without an Explicit Sort
+**What goes wrong:** The `agents[]` array is built from a `Map` keyed by `agentId`. Map insertion order follows TurnEvent order in `trace.events`. For coordinator protocols with parallel sub-agent turns, event order may differ between runs, causing the fixture's `agents` ordering to drift from live output.
+**Why it happens:** Map iteration order is insertion order in JS/TS, but parallel-turn events may not always arrive in the same order.
+**How to avoid:** Sort `agents` by `id` before returning: `agents.sort((a, b) => a.id.localeCompare(b.id))`. The fixture JSON `agents[]` must be sorted by `id` to match. This gives deterministic output regardless of event arrival order.
 
 ## Code Examples
 
@@ -391,8 +424,11 @@ export function createAuditRecord(trace: Trace): AuditRecord {
       ? { status: "budget-stopped", terminationCode: budgetStopEvent.reason }
       : { status: "aborted" };
 
-  // Cost: from FinalEvent if present; BudgetStopEvent.cost if budget-stopped; empty otherwise
-  const costSource = finalEvent?.cost ?? budgetStopEvent?.cost;
+  // Cost: prefer FinalEvent (completed), then BudgetStopEvent (budget-stopped),
+  // then last TurnEvent's cumulative cost (aborted runs — no terminal cost event).
+  // TurnEvent.cost is cumulative after each turn, so the last one is the best estimate.
+  const lastTurnEvent = [...trace.events].reverse().find((e): e is TurnEvent => e.type === "agent-turn");
+  const costSource = finalEvent?.cost ?? budgetStopEvent?.cost ?? lastTurnEvent?.cost;
   const cost: AuditCost = {
     usd: costSource?.usd ?? 0,
     inputTokens: costSource?.inputTokens ?? 0,
@@ -408,15 +444,17 @@ export function createAuditRecord(trace: Trace): AuditRecord {
     else { agentTurnMap.set(e.agentId, { role: e.role, count: 1 }); }
   }
 
-  const agents: AuditAgentRecord[] = [...agentTurnMap.entries()].map(([id, { role, count }]) => ({
-    id, role, turnCount: count
-  }));
+  // Sort by id for deterministic ordering across runs (see Pitfall 9)
+  const agents: AuditAgentRecord[] = [...agentTurnMap.entries()]
+    .map(([id, { role, count }]) => ({ id, role, turnCount: count }))
+    .sort((a, b) => a.id.localeCompare(b.id));
 
   // childRunIds from SubRunCompletedEvent
   const childRunIds = trace.events
     .filter((e): e is SubRunCompletedEvent => e.type === "sub-run-completed")
     .map((e) => e.childRunId);
 
+  // Field order must match audit-record-v1.json exactly (see Pitfall 8)
   return {
     auditSchemaVersion: "1",
     runId: trace.runId,
@@ -449,6 +487,8 @@ export function createAuditRecord(trace: Trace): AuditRecord {
 [VERIFIED: src/tests/package-exports.test.ts lines 1294–1298 — existing `./runtime/provenance` block to mirror]
 
 ### Fixture JSON Structure (audit-record-v1.json)
+
+Fields are in the order the implementation assembles them. `agents[]` is sorted by `id`.
 
 ```json
 {
@@ -505,7 +545,7 @@ export function createAuditRecord(trace: Trace): AuditRecord {
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
 | A1 | `trace.events[0]` will always have an `at` field for `startedAt` derivation | Code Examples | If first event is a model-request, use `startedAt` field instead — handle in implementation with the eventTimestamp pattern from defaults.ts |
-| A2 | `BudgetStopEvent.cost` carries the full cumulative cost at stop point | Code Examples | Cost would be 0 for budget-stopped outcomes; verified event shape shows `.cost: CostSummary` |
+| A2 | `BudgetStopEvent.cost` carries the full cumulative cost at stop point | Code Examples | Cost is still reasonable for budget-stopped runs; skeleton now also falls back to last TurnEvent cost |
 
 [A2 VERIFIED: src/types/events.ts BudgetStopEvent line 424: `readonly cost: CostSummary`]
 
@@ -516,10 +556,11 @@ export function createAuditRecord(trace: Trace): AuditRecord {
    - What's unclear: user preference
    - Recommendation: Collapse. Remove `terminationReason?`. `outcome.terminationCode` carrying BudgetStopReason is sufficient for all machine consumers. If the user requires human strings, add a field in Phase 9+. This recommendation is strong enough to make it the default plan choice.
 
-2. **type-check.ts JSON import — assert syntax**
-   - What we know: `import fixture from "./audit-record-v1.json" assert { type: "json" }` is the import assertion syntax
-   - What's unclear: whether the project tsconfig resolves JSON imports (check `resolveJsonModule` setting)
-   - Recommendation: Verify `tsconfig.json` has `"resolveJsonModule": true` before implementing. If not set, the import will fail.
+2. **type-check.ts JSON import approach**
+   - What we know: This project's tsconfig uses `moduleResolution: "Bundler"`, `verbatimModuleSyntax: true`, and has no `resolveJsonModule` — bare JSON imports are not supported. The `assert { type: "json" }` syntax is also deprecated in TS 5.3+ (replaced by `with { type: "json" }`), and neither form works without `resolveJsonModule`.
+   - Resolution: Use an inline object that mirrors the fixture JSON with `satisfies AuditRecord` (see Pattern 5 and the updated Code Examples section). This is fully covered by `tsconfig.json`'s `"include": ["src/**/*.ts"]` with no additional config.
+
+[VERIFIED: tsconfig.json — no `resolveJsonModule`, `verbatimModuleSyntax: true`, `moduleResolution: "Bundler"`]
 
 ## Environment Availability
 
@@ -558,7 +599,7 @@ SKIPPED — Phase 8 is a pure TypeScript addition. No external tools, services, 
 - [ ] `src/runtime/audit.test.ts` — co-located unit tests
 - [ ] `src/tests/audit-record-shape.test.ts` — frozen fixture deepEqual test
 - [ ] `src/tests/fixtures/audit-record-v1.json` — frozen fixture
-- [ ] `src/tests/fixtures/audit-record-v1.type-check.ts` — compile-time satisfies assertion
+- [ ] `src/tests/fixtures/audit-record-v1.type-check.ts` — compile-time satisfies assertion (inline object, not JSON import)
 
 ## Project Constraints (from CLAUDE.md)
 
@@ -570,6 +611,7 @@ SKIPPED — Phase 8 is a pure TypeScript addition. No external tools, services, 
 - **Event-shape changes are public-API changes.** Phase 8 introduces no event-shape changes — AuditRecord is computed from the trace, not emitted as an event.
 - **`AuditRecord` is an independent type** (per STATE.md): not derived from `RunEvent` via Pick/Omit; has its own `auditSchemaVersion: "1"`.
 - **Conventional Commit subjects** (`feat:` for new API, `docs:` for CHANGELOG/CLAUDE.md updates).
+- **No bare JSON imports:** `tsconfig.json` uses `moduleResolution: "Bundler"` + `verbatimModuleSyntax: true` without `resolveJsonModule`. type-check.ts must use an inline object with `satisfies AuditRecord`.
 
 ## Security Domain
 
@@ -585,7 +627,8 @@ Phase 8 introduces no authentication, session management, access control, or cry
 - `src/runtime/provenance.ts` — Template for standalone subpath module structure
 - `src/runtime/defaults.ts` — eventTimestamp() derivation pattern (lines 562–568), createReplayTraceFinalOutput (lines 538–560)
 - `src/tests/package-exports.test.ts` — manifest.exports and manifest.files assertion blocks (lines 1106–1334)
-- `src/tests/provenance-shape.test.ts` — frozen fixture test pattern
+- `src/tests/provenance-shape.test.ts` — frozen fixture test pattern (readFile + JSON.parse, not JSON import)
+- `tsconfig.json` — moduleResolution, verbatimModuleSyntax, include glob
 - `.planning/phases/08-audit-event-schema/08-CONTEXT.md` — all locked decisions
 - `.planning/phases/07-structured-event-introspection-health-diagnostics/07-CONTEXT.md` — computeHealth pattern, subpath wiring steps
 
