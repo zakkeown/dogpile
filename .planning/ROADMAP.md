@@ -17,7 +17,7 @@ requirements_total: 27
 - [x] **Phase 2: Budget, Cancellation, Cost Roll-Up** — Parent abort + timeout propagation; recursive cost/token roll-up; per-instance termination floors.
 - [x] **Phase 3: Provider Locality & Bounded Concurrency** — `locality` field on `ConfiguredModelProvider`; OpenAI-compatible auto-detect; `maxConcurrentChildren` with local auto-clamp.
 - [x] **Phase 4: Streaming & Child Error Escalation** — Child events wrapped on parent stream; cancel propagation; child failure surfaced through coordinator decision context.
-- [ ] **Phase 5: Documentation & Changelog** — `docs/recursive-coordination.md`, runnable example, README row, CHANGELOG v0.4.0 entry.
+- [x] **Phase 5: Documentation & Changelog** — `docs/recursive-coordination.md`, runnable example, README row, CHANGELOG v0.4.0 entry.
 
 ## Phase Details
 
@@ -102,12 +102,12 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 05-01-recursive-coordination-docs-PLAN.md — docs/recursive-coordination.md + recursive-coordination-reference.md (concept page + exhaustive reference)
-- [ ] 05-02-cross-doc-sync-PLAN.md — docs/reference.md + developer-usage.md + AGENTS.md + CLAUDE.md sync for v0.4.0 public surface
-- [ ] 05-03-recursive-coordination-example-PLAN.md — examples/recursive-coordination/run.mjs + README mirroring huggingface format
-- [ ] 05-04-readme-and-examples-index-PLAN.md — README "Choose Your Path" row + examples/README.md mirror entry
-- [ ] 05-05-changelog-restructure-PLAN.md — CHANGELOG v0.4.0 thematic-with-(Phase N)-tags restructure + Migration subsection
-- [ ] 05-06-release-cut-PLAN.md — pnpm run verify + version bump + date-stamp + tag + GitHub Release + npm publish via OIDC
+- [x] 05-01-recursive-coordination-docs-PLAN.md — docs/recursive-coordination.md + recursive-coordination-reference.md (concept page + exhaustive reference)
+- [x] 05-02-cross-doc-sync-PLAN.md — docs/reference.md + developer-usage.md + AGENTS.md + CLAUDE.md sync for v0.4.0 public surface
+- [x] 05-03-recursive-coordination-example-PLAN.md — examples/recursive-coordination/run.mjs + README mirroring huggingface format
+- [x] 05-04-readme-and-examples-index-PLAN.md — README "Choose Your Path" row + examples/README.md mirror entry
+- [x] 05-05-changelog-restructure-PLAN.md — CHANGELOG v0.4.0 thematic-with-(Phase N)-tags restructure + Migration subsection
+- [x] 05-06-release-cut-PLAN.md — pnpm run verify + version bump + date-stamp + tag + GitHub Release + npm publish via OIDC
 
 ## Progress
 
@@ -117,7 +117,7 @@ Plans:
 | 2. Budget, Cancellation, Cost Roll-Up | 4/4 | Complete | 2026-04-30 |
 | 3. Provider Locality & Bounded Concurrency | 3/3 | Complete | 2026-05-01 |
 | 4. Streaming & Child Error Escalation | 4/4 | Complete | 2026-05-01 |
-| 5. Documentation & Changelog | 0/6 | Planned | - |
+| 5. Documentation & Changelog | 6/6 | Complete | 2026-05-01 |
 
 ## Coverage
 

@@ -54,10 +54,10 @@ REQ-ID format: `[CATEGORY]-[NN]`. Numbering restarts per milestone (no prior REQ
 
 ### DOCS — discoverability
 
-- [ ] **DOCS-01** — `docs/recursive-coordination.md` documents the `delegate` decision, propagation rules, concurrency, locality, and trace embedding with a worked example.
-- [ ] **DOCS-02** — `examples/recursive-coordination/` is a runnable example using `createOpenAICompatibleProvider`.
-- [ ] **DOCS-03** — README "Choose Your Path" table gets a new row pointing at `delegate`.
-- [ ] **DOCS-04** — `CHANGELOG.md` v0.4.0 entry lists public-surface additions (`delegate` decision, `subRun.*` events, `locality` field, `maxConcurrentChildren` config, `maxDepth` config).
+- [x] **DOCS-01** — `docs/recursive-coordination.md` documents the `delegate` decision, propagation rules, concurrency, locality, and trace embedding with a worked example.
+- [x] **DOCS-02** — `examples/recursive-coordination/` is a runnable example using `createOpenAICompatibleProvider`.
+- [x] **DOCS-03** — README "Choose Your Path" table gets a new row pointing at `delegate`.
+- [x] **DOCS-04** — `CHANGELOG.md` v0.4.0 entry lists public-surface additions (`delegate` decision, `subRun.*` events, `locality` field, `maxConcurrentChildren` config, `maxDepth` config).
 
 ---
 
@@ -103,13 +103,13 @@ REQ-ID format: `[CATEGORY]-[NN]`. Numbering restarts per milestone (no prior REQ
 | ERROR-01 | Phase 4 | Complete |
 | ERROR-02 | Phase 4 | Complete |
 | ERROR-03 | Phase 4 | Complete |
-| DOCS-01 | Phase 5 | Pending |
-| DOCS-02 | Phase 5 | Pending |
-| DOCS-03 | Phase 5 | Pending |
-| DOCS-04 | Phase 5 | Pending |
+| DOCS-01 | Phase 5 | Complete |
+| DOCS-02 | Phase 5 | Complete |
+| DOCS-03 | Phase 5 | Complete |
+| DOCS-04 | Phase 5 | Complete |
 
 **Coverage:** 27/27 mapped, no orphans, no duplicates.
 
 ---
 
-*Last updated: 2026-04-30 — traceability filled by roadmap step.*
+*Last updated: 2026-05-01 — v0.4.0 shipped; all DOCS requirements complete.*

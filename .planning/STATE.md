@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.4.0
 milestone_name: milestone
-status: Phase 4 complete; ready for Phase 5 documentation and changelog
-last_updated: "2026-05-01T15:01:56Z"
-last_activity: 2026-05-01 -- Phase 04 verified and code review clean
+status: Phase 5 complete; v0.4.0 shipped to npm on 2026-05-01
+last_updated: "2026-05-01T16:30:00Z"
+last_activity: 2026-05-01 -- Phase 05 complete; @dogpile/sdk@0.4.0 published
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 22
-  completed_plans: 16
-  percent: 73
+  completed_plans: 22
+  percent: 100
 ---
 
 # State
@@ -23,18 +23,18 @@ progress:
 
 ## Current Position
 
-Phase: 05
-Plan: 05-01
-Status: Phase 4 complete and verified; ready for Phase 5 documentation and changelog
-Last activity: 2026-05-01 -- Phase 04 verified and code review clean
+Phase: complete
+Plan: complete
+Status: v0.4.0 Recursive Coordination shipped to npm
+Last activity: 2026-05-01 -- Phase 05 complete; @dogpile/sdk@0.4.0 published
 
 ## Performance Metrics
 
 | Metric | Value |
 |--------|-------|
-| Phases complete | 4 / 5 |
-| Requirements complete | 23 / 27 |
-| Plans complete | 16 / 22 |
+| Phases complete | 5 / 5 |
+| Requirements complete | 27 / 27 |
+| Plans complete | 22 / 22 |
 
 ## Accumulated Context
 
@@ -63,10 +63,11 @@ Last activity: 2026-05-01 -- Phase 04 verified and code review clean
 - **Phase 4 Plan 04-03 — onChildFailure config.** `onChildFailure?: "continue" | "abort"` is public on engine, high-level, and per-run surfaces; it resolves per-run > engine > default `continue`, and abort mode stores `triggeringFailureForAbortMode`.
 - **Phase 4 Plan 04-04 — Terminal child failure throws.** Budget terminal paths re-throw the last real child failure instance from `failureInstancesByChildRunId`; replay reconstructs a fresh `DogpileError` from serialized `sub-run-failed.error`; cancel and depth-overflow errors remain verbatim.
 - **Phase 4 Plan 04-04 — Timeout source discrimination.** `provider-timeout` errors now support optional `detail.source: "provider" | "engine"`; absence remains provider-compatible, and parent-budget propagation remains `aborted` with `detail.reason: "timeout"`.
+- **Phase 5 — v0.4.0 release shipped.** Recursive coordination docs, exhaustive reference, runnable example, README/examples index, developer/reference docs, changelog migration notes, release identity, tag `v0.4.0`, GitHub Release, and npm publication all landed; `@dogpile/sdk@0.4.0` is `latest`.
 
 ### Todos
 
-- Execute Phase 5 Plan 05-01: recursive coordination docs.
+(none)
 
 ### Blockers
 
@@ -74,8 +75,8 @@ Last activity: 2026-05-01 -- Phase 04 verified and code review clean
 
 ## Session Continuity
 
-**Next action:** Execute Phase 5 Plan 05-01 recursive coordination docs.
+**Next action:** v0.4.0 shipped. Define the next milestone or pick follow-ups from Future Requirements: caller-defined trees, cross-protocol shared transcript, per-child retry policy, or OTEL/tracing bridge.
 
 ---
 
-*Last updated: 2026-05-01 — Phase 4 complete; 23/27 requirements shipped; verify green and code review clean.*
+*Last updated: 2026-05-01 — Phase 5 complete; 27/27 requirements shipped; @dogpile/sdk@0.4.0 published.*
