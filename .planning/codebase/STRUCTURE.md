@@ -26,6 +26,8 @@ dogpile/
 │   │   ├── wrap-up.ts                # Final-turn wrap-up hint controller
 │   │   ├── cancellation.ts           # Abort/timeout → DogpileError
 │   │   ├── defaults.ts               # Default agents, tier→temperature, trace canonicalization
+│   │   ├── introspection.ts          # Structured completed-event query contract
+│   │   ├── health.ts                 # Run health diagnostics contract
 │   │   ├── validation.ts             # Public-input validation → invalid-configuration errors
 │   │   └── *.test.ts                 # Co-located unit tests
 │   ├── providers/
@@ -53,7 +55,9 @@ dogpile/
 │       ├── consumer-type-resolution-smoke.test.ts
 │       ├── (… other contract tests …)
 │       └── fixtures/
-│           └── consumer-type-resolution-smoke.ts
+│           ├── anomaly-record-v1.json
+│           ├── consumer-type-resolution-smoke.ts
+│           └── provenance-event-v1.json
 ├── scripts/                          # Release/packaging gates (Node ESM)
 │   ├── benchmark-baseline.mjs
 │   ├── check-pack-sourcemaps.mjs
@@ -98,8 +102,8 @@ dogpile/
 
 **`src/runtime/`:**
 - Purpose: The coordination engine — protocols and shared helpers. Pure TS, browser-safe.
-- Contains: Four protocol modules + engine + cross-cutting helpers + co-located unit tests.
-- Key files: `engine.ts`, `sequential.ts`, `broadcast.ts`, `coordinator.ts`, `shared.ts`, `termination.ts`, `tools.ts`, `defaults.ts`, `validation.ts`.
+- Contains: Four protocol modules + engine + cross-cutting helpers + observability helpers + co-located unit tests.
+- Key files: `engine.ts`, `sequential.ts`, `broadcast.ts`, `coordinator.ts`, `shared.ts`, `termination.ts`, `tools.ts`, `defaults.ts`, `introspection.ts`, `health.ts`, `validation.ts`.
 
 **`src/providers/`:**
 - Purpose: Provider adapters that build a `ConfiguredModelProvider`.
@@ -165,6 +169,8 @@ dogpile/
 - `src/runtime/termination.ts`: Termination DSL and evaluators.
 - `src/runtime/tools.ts`: Runtime tool adapter contract + built-in tools.
 - `src/runtime/defaults.ts`: Trace canonicalization, defaults, accounting.
+- `src/runtime/introspection.ts`: Completed-event query contract for structured introspection.
+- `src/runtime/health.ts`: Run health diagnostics contract and thresholds.
 - `src/runtime/validation.ts`: Input validation.
 - `src/types.ts`: All exported types + `DogpileError`.
 

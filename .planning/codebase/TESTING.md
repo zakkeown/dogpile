@@ -38,6 +38,7 @@ pnpm run browser:smoke                  # Build + run browser-bundle smoke
 
 **Fixtures:**
 - Static type-resolution fixtures: `src/tests/fixtures/consumer-type-resolution-smoke.ts`.
+- Frozen public-shape fixtures: `src/tests/fixtures/provenance-event-v1.json`, `src/tests/fixtures/anomaly-record-v1.json`.
 - Repro fixtures for paper-reproduction benchmarks: `benchmark-fixtures/` at repo root (excluded from the npm tarball).
 
 ## Test Structure
@@ -126,7 +127,7 @@ const model: ConfiguredModelProvider = {
 
 **Location:**
 - Live providers and missions: `src/testing/deterministic-provider.ts` (published).
-- Static fixtures consumed by smoke tests: `src/tests/fixtures/`.
+- Static fixtures consumed by smoke, contract, and schema-shape tests: `src/tests/fixtures/`.
 - Benchmark/paper-reproduction fixtures: `benchmark-fixtures/` (repo-internal).
 
 **Pattern:** Factories return fully-typed `ConfiguredModelProvider` or `DogpileOptions` objects. No global state, no setup/teardown.

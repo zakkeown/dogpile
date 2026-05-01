@@ -1,6 +1,6 @@
 ---
 milestone: v0.5.0
-status: planning
+status: executing
 last_completed: v0.4.0
 ---
 
@@ -68,7 +68,7 @@ Plans:
 4. Calling `replay(trace)` produces a `RunResult` whose `health` summary is byte-for-byte identical to the original run's health summary, confirming deterministic re-computation.
 **Plans:** 5 plans
 Plans:
-- [ ] 07-01-PLAN.md — Types + contracts: RunHealthSummary/HealthAnomaly/AnomalyCode in types.ts, skeleton modules, frozen fixture
+- [x] 07-01-PLAN.md — Types + contracts: RunHealthSummary/HealthAnomaly/AnomalyCode in types.ts, skeleton modules, frozen fixture
 - [ ] 07-02-PLAN.md — queryEvents implementation + unit tests (introspection)
 - [ ] 07-03-PLAN.md — computeHealth implementation + unit tests (health diagnostics)
 - [ ] 07-04-PLAN.md — Engine attach: result.health on run/replay paths + canonicalizeRunResult + contract tests
@@ -110,7 +110,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Provenance Annotations | 6/6 | Complete | 2026-05-01 |
-| 7. Structured Event Introspection + Health Diagnostics | 0/5 | Not started | — |
+| 7. Structured Event Introspection + Health Diagnostics | 1/5 | In Progress | — |
 | 8. Audit Event Schema | 0/? | Not started | — |
 | 9. OTEL Tracing Bridge | 0/? | Not started | — |
 | 10. Metrics / Counters | 0/? | Not started | — |
@@ -130,4 +130,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-05-01 — Phase 7 planning complete: 5 plans in 4 waves.*
+*Last updated: 2026-05-01 — Phase 7 plan 07-01 complete: contracts and fixtures established.*

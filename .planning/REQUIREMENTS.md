@@ -15,13 +15,13 @@
 
 ### Structured Event Introspection
 
-- [ ] **INTR-01**: Caller can filter completed trace events by type, agent id, turn number, or cost range using a typed query function
-- [ ] **INTR-02**: Introspection query returns typed subsets of `RunEvent[]` with no new types introduced (callers narrow, not cast)
+- [x] **INTR-01**: Caller can filter completed trace events by type, agent id, turn number, or cost range using a typed query function
+- [x] **INTR-02**: Introspection query returns typed subsets of `RunEvent[]` with no new types introduced (callers narrow, not cast)
 
 ### Health Diagnostics
 
-- [ ] **HLTH-01**: Caller can read a structured health summary on `RunResult` with machine-readable anomaly codes (`runaway-turns`, `budget-near-miss`, `empty-contribution`, `provider-error-recovered`) and configurable thresholds
-- [ ] **HLTH-02**: Health summary is computed at result time, available on `replay()`, and re-computed identically from the same trace on any runtime
+- [x] **HLTH-01**: Caller can read a structured health summary on `RunResult` with machine-readable anomaly codes (`runaway-turns`, `budget-near-miss`, `empty-contribution`, `provider-error-recovered`) and configurable thresholds
+- [x] **HLTH-02**: Health summary is computed at result time, available on `replay()`, and re-computed identically from the same trace on any runtime
 
 ### Audit Event Schema
 
