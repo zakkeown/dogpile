@@ -713,6 +713,28 @@ describe("SDK streaming API", () => {
     });
   });
 
+  it("status reflects cancelled after StreamHandle.cancel() resolves the abort path", async () => {
+    const provider = createAbortableFanOutProvider("stream-status-cancelled-model");
+    const handle = stream({
+      intent: "Reflect cancelled stream status.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      maxConcurrentChildren: 2,
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+    const result = handle.result.catch((error: unknown) => error);
+
+    await provider.waitForStartedChildren(2);
+    handle.cancel();
+    await result;
+
+    expect(handle.status).toBe("cancelled");
+  });
+
   it("yields agent-turn events during sequential protocol execution before the result resolves", async () => {
     const gates = createResponseGates(["first turn", "second turn"]);
     const model = createGatedModelProvider("gated-sequential-model", gates);

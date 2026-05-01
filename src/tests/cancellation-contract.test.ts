@@ -163,6 +163,102 @@ describe("caller cancellation contract", () => {
     });
   });
 
+  it("parent-aborted-after-completion emits aborted without synthetic sub-run failures", async () => {
+    const secondPlanStarted = createDeferred<void>();
+    let planIndex = 0;
+    const provider: ConfiguredModelProvider = {
+      id: "parent-aborted-after-completion-model",
+      async generate(request: ModelRequest): Promise<ModelResponse> {
+        const phase = String(request.metadata.phase);
+        const protocol = String(request.metadata.protocol);
+        if (protocol === "coordinator" && phase === "plan") {
+          if (planIndex === 0) {
+            planIndex += 1;
+            return {
+              text: delegateBlock({ protocol: "sequential", intent: "complete child before parent cancel" }),
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              costUsd: 0
+            };
+          }
+          secondPlanStarted.resolve();
+          await waitForAbort(request.signal ?? new AbortController().signal);
+          throw request.signal?.reason;
+        }
+        if (protocol === "sequential") {
+          return { text: "completed child", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+        }
+        return { text: "final", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0 };
+      }
+    };
+    const handle = stream({
+      intent: "Cancel parent after child completion but before final.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+    const eventsPromise = collectStreamEvents(handle);
+    const result = handle.result.catch((error: unknown) => error);
+
+    await secondPlanStarted.promise;
+    handle.cancel();
+    await result;
+    const events = await eventsPromise;
+
+    expect(events.filter((event) => event.type === "sub-run-completed")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "sub-run-failed")).toHaveLength(0);
+    expect(events.filter((event) => event.type === "aborted")).toMatchObject([
+      { type: "aborted", reason: "parent-aborted" }
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      type: "error",
+      detail: {
+        code: "aborted"
+      }
+    });
+  });
+
+  it("aborted event reason mirrors timeout aborts", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const fetchProbe = createAbortableFetchProbe();
+      const streamText: VercelAIStreamTextFunction = (options) => ({
+        textStream: streamFromFetch(fetchProbe, options.abortSignal)
+      });
+      const provider = createVercelAIProvider({
+        id: "aborted-reason-timeout-contract",
+        model,
+        streaming: true,
+        streamText
+      });
+      const handle = stream({
+        intent: "Mirror timeout reason on aborted lifecycle event.",
+        protocol: { kind: "sequential", maxTurns: 1 },
+        tier: "balanced",
+        model: provider,
+        agents: [{ id: "writer", role: "writer" }],
+        budget: { timeoutMs: 5 }
+      });
+      const eventsPromise = collectStreamEvents(handle);
+      const result = handle.result.catch((error: unknown) => error);
+
+      await fetchProbe.receivedSignal;
+      await vi.advanceTimersByTimeAsync(5);
+      await result;
+
+      expect((await eventsPromise).find((event) => event.type === "aborted")).toMatchObject({
+        type: "aborted",
+        reason: "timeout"
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("propagates run() caller AbortSignal into the in-flight provider fetch", async () => {
     const abortController = new AbortController();
     const fetchProbe = createAbortableFetchProbe();
