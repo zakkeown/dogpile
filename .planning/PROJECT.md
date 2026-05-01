@@ -14,7 +14,7 @@ Coordinated, observable, replayable multi-agent runs with a strict boundary: Dog
 
 **Latest shipped milestone:** v0.4.0 Recursive Coordination.
 
-Dogpile now supports agent-driven recursive coordination: a `coordinator` agent can return a `delegate` decision that runs a real child mission, embeds the child trace, rolls up accounting, propagates abort/timeout budget ceilings, streams child events with ancestry, and surfaces child failures back into coordinator decision context.
+Dogpile now supports agent-driven recursive coordination and the first v0.5 observability slice. A `coordinator` agent can return a `delegate` decision that runs a real child mission, embeds the child trace, rolls up accounting, propagates abort/timeout budget ceilings, streams child events with ancestry, and surfaces child failures back into coordinator decision context. Phase 6 also added live model request/response provenance events, replay/replayStream provenance parity, and the `@dogpile/sdk/runtime/provenance` helper.
 
 **Validated v0.4.0 features:**
 - `delegate` decision on `coordinator` (no new protocol value)
@@ -25,6 +25,8 @@ Dogpile now supports agent-driven recursive coordination: a `coordinator` agent 
 - Streaming demux via wrapped child `runId`
 - Child error escalation through coordinator decision context
 - Docs page, example, README row
+- Provenance annotations on model request/response events
+- Replay and replayStream provenance stability
 
 ## Current Milestone: v0.5.0 Observability and Auditability
 
@@ -36,7 +38,7 @@ Dogpile now supports agent-driven recursive coordination: a `coordinator` agent 
 - Structured event introspection — typed query/filter API over completed trace events (by type, agent, turn, cost)
 - Health / diagnostics API — per-run health summary at result time: warnings, anomalies (runaway turns, budget near-miss, provider errors)
 - Audit event schema — stable, versioned, human-readable audit record format for compliance
-- Provenance annotations — structured metadata on each event (model id, provider id, timestamps) for decision traceability
+- Provenance annotations — completed in Phase 6: structured model id, provider id, call id, and timestamps on model request/response events with replay stability
 
 ## Requirements
 
@@ -66,6 +68,8 @@ Dogpile now supports agent-driven recursive coordination: a `coordinator` agent 
 - ✓ **Provider locality and bounded child concurrency** — `metadata.locality`, OpenAI-compatible locality detection, `maxConcurrentChildren`, queued events, and local-provider clamp. — v0.4.0
 - ✓ **Recursive streaming and child failure handling** — child stream events bubble with `parentRunIds`; coordinator decision context receives real child failures; unhandled terminal failures preserve child error identity. — v0.4.0
 - ✓ **Recursive coordination documentation and release artifacts** — concept docs, exhaustive reference, runnable example, README/examples links, changelog, GitHub Release, and npm package. — v0.4.0
+- ✓ **Model-call provenance annotations** — `model-request` / `model-response` events carry `modelId`, `providerId`, `callId`, and ISO timestamps; `replay()` / `replayStream()` preserve or synthesize provenance from provider calls. — Phase 6, v0.5.0
+- ✓ **Runtime provenance helper** — `@dogpile/sdk/runtime/provenance` exports `getProvenance()`, `ProvenanceRecord`, and `PartialProvenanceRecord`, backed by frozen shape fixtures and package export tests. — Phase 6, v0.5.0
 
 ### Active
 
@@ -142,4 +146,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-01 — v0.5.0 Observability and Auditability milestone started.*
+*Last updated: 2026-05-01 — Phase 6 Provenance Annotations complete and verified.*

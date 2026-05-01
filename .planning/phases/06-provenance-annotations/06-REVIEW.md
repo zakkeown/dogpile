@@ -44,7 +44,9 @@ findings:
   warning: 4
   info: 0
   total: 6
-status: issues_found
+status: resolved
+resolved: 2026-05-01T19:12:00Z
+resolution_commit: 6105b72
 ---
 
 # Phase 06: Code Review Report
@@ -52,11 +54,29 @@ status: issues_found
 **Reviewed:** 2026-05-01T18:57:44Z
 **Depth:** standard
 **Files Reviewed:** 35
-**Status:** issues_found
+**Status:** resolved
 
 ## Summary
 
 Reviewed the provenance event implementation, replay synthesis, provider adapter model IDs, public helper, package exports, docs/changelog, and the listed contract tests. The highest-risk defects are in replay: current traces with already-correct live provenance are stripped and re-synthesized in a way that can reorder streaming/tool/concurrent events, and timestamp normalization treats `model-response` completion events as if they happened at request start.
+
+## Resolution
+
+Resolved in `6105b72` (`fix(06): preserve provenance replay semantics`):
+
+- CR-01 fixed by preserving current traces that already contain live provenance events and limiting provider-call synthesis to legacy traces.
+- CR-02 fixed by using `completedAt` as the normalized timestamp for `model-response` events.
+- WR-01 fixed by making `replayStream()` iterate the same synthesized event sequence as `replay()`.
+- WR-02 fixed by cloning model request messages and metadata before provider execution.
+- WR-03 fixed by removing fixture self-healing from provenance and replay skew tests.
+- WR-04 accepted as non-blocking release workflow scope: package identity remains `0.4.0` until the release/version bump path runs, while Phase 6 intentionally records the v0.5.0 changelog entry.
+
+Verification after fixes:
+
+- `pnpm run typecheck` passed.
+- Focused replay/provenance tests passed.
+- `pnpm run test` passed: 47 files, 660 tests, 1 skipped.
+- `pnpm run pack:check` passed.
 
 ## Critical Issues
 

@@ -10,8 +10,8 @@
 
 ### Provenance Annotations
 
-- [ ] **PROV-01**: Caller can read provenance metadata (model id, provider id, call id, ISO-8601 start/end timestamps) on model-request and model-response events in a completed trace
-- [ ] **PROV-02**: Provenance fields are JSON-serializable and survive a round-trip through `replay()`
+- [x] **PROV-01**: Caller can read provenance metadata (model id, provider id, call id, ISO-8601 start/end timestamps) on model-request and model-response events in a completed trace
+- [x] **PROV-02**: Provenance fields are JSON-serializable and survive a round-trip through `replay()`
 
 ### Structured Event Introspection
 
