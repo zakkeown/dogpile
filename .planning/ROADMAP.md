@@ -98,8 +98,16 @@ Plans:
   2. `examples/recursive-coordination/` is a runnable example wired against `createOpenAICompatibleProvider` that exercises a real `delegate` flow end-to-end.
   3. README's "Choose Your Path" table gains a row pointing at `delegate` / recursive coordination.
   4. `CHANGELOG.md` v0.4.0 entry lists every public-surface addition: `delegate` decision variant, `subRun.*` events, `locality` field, `maxConcurrentChildren` config, `maxDepth` config.
-**Key files**: `docs/recursive-coordination.md`, `examples/recursive-coordination/`, `README.md`, `CHANGELOG.md`, `examples/README.md`
-**Plans**: TBD
+**Key files**: `docs/recursive-coordination.md`, `docs/recursive-coordination-reference.md`, `docs/developer-usage.md`, `docs/reference.md`, `examples/recursive-coordination/`, `README.md`, `CHANGELOG.md`, `examples/README.md`, `AGENTS.md`, `CLAUDE.md`, `package.json`, `docs/release.md`
+**Plans**: 6 plans
+
+Plans:
+- [ ] 05-01-recursive-coordination-docs-PLAN.md — docs/recursive-coordination.md + recursive-coordination-reference.md (concept page + exhaustive reference)
+- [ ] 05-02-cross-doc-sync-PLAN.md — docs/reference.md + developer-usage.md + AGENTS.md + CLAUDE.md sync for v0.4.0 public surface
+- [ ] 05-03-recursive-coordination-example-PLAN.md — examples/recursive-coordination/run.mjs + README mirroring huggingface format
+- [ ] 05-04-readme-and-examples-index-PLAN.md — README "Choose Your Path" row + examples/README.md mirror entry
+- [ ] 05-05-changelog-restructure-PLAN.md — CHANGELOG v0.4.0 thematic-with-(Phase N)-tags restructure + Migration subsection
+- [ ] 05-06-release-cut-PLAN.md — pnpm run verify + version bump + date-stamp + tag + GitHub Release + npm publish via OIDC
 
 ## Progress
 
