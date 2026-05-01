@@ -825,7 +825,20 @@ export type StreamLifecycleEvent =
   | SubRunParentAbortedEvent
   | SubRunBudgetClampedEvent
   | SubRunQueuedEvent
-  | SubRunConcurrencyClampedEvent;
+  | SubRunConcurrencyClampedEvent
+  | AbortedEvent;
+
+/**
+ * Lifecycle event yielded by `stream()` when a run is aborted.
+ */
+export interface AbortedEvent {
+  readonly type: "aborted";
+  readonly runId: string;
+  readonly at: string;
+  readonly reason: "parent-aborted" | "timeout";
+  readonly detail?: JsonObject;
+  readonly parentRunIds?: readonly string[];
+}
 
 /**
  * Output event yielded by `stream()`.

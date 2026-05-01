@@ -927,7 +927,7 @@ describe("trace event schema", () => {
 async function collectStreamedEvents(handle: AsyncIterable<StreamEvent>): Promise<RunEvent[]> {
   const events: RunEvent[] = [];
   for await (const event of handle) {
-    if (event.type !== "error") {
+    if (event.type !== "error" && event.type !== "aborted") {
       events.push(event);
     }
   }

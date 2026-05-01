@@ -1292,6 +1292,7 @@ export type {
 
 // Events: see src/types/events.ts
 import type {
+  AbortedEvent,
   AgentDecision,
   AgentParticipation,
   BroadcastContribution,
@@ -1325,6 +1326,7 @@ import type {
   TurnEvent
 } from "./types/events.js";
 export type {
+  AbortedEvent,
   AgentDecision,
   AgentParticipation,
   DelegateAgentDecision,

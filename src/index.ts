@@ -75,6 +75,7 @@ export {
   judge
 } from "./runtime/termination.js";
 export type {
+  AbortedEvent,
   AgentSpec,
   AgentDecision,
   AgentParticipation,

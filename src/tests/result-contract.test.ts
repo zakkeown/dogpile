@@ -1042,7 +1042,7 @@ describe("single-call result contract", () => {
       agents: [{ id: "writer", role: "writer" }]
     });
 
-    expect(result.trace.events.filter((event) => event.type === "aborted")).toHaveLength(0);
+    expect(result.trace.events.filter((event) => (event as { readonly type: string }).type === "aborted")).toHaveLength(0);
   });
 
   it("round-trips a sub-run-parent-aborted RunEvent variant through JSON serialization", () => {
