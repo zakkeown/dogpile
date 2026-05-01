@@ -26,15 +26,17 @@ Dogpile now supports agent-driven recursive coordination: a `coordinator` agent 
 - Child error escalation through coordinator decision context
 - Docs page, example, README row
 
-## Next Milestone Goals
+## Current Milestone: v0.5.0 Observability and Auditability
 
-To be selected with `$gsd-new-milestone`. Candidate follow-ups from the shipped v0.4.0 scope:
+**Goal:** Give callers full visibility into what Dogpile runs do — spans, metrics, event introspection, health diagnostics, stable audit records, and per-event provenance — without adding required dependencies or breaking the pure-TS runtime contract.
 
-- Caller-defined-tree API: `Dogpile.nest({ children: [...] })`
-- Cross-protocol shared transcript across parent/child boundary
-- Per-child retry policy on `delegate` decisions
-- OTEL / tracing bridge for sub-run spans
-- Discovery improvements if `delegate`-on-`coordinator` proves too subtle
+**Target features:**
+- OTEL tracing bridge — caller-injected `tracer` (duck-typed against OTEL Tracer interface); SDK emits spans for runs, sub-runs, and agent turns; no-op when absent; zero new deps
+- Metrics / counters — named numeric metrics (tokens, cost, turns, duration) emitted through a caller-supplied hook
+- Structured event introspection — typed query/filter API over completed trace events (by type, agent, turn, cost)
+- Health / diagnostics API — per-run health summary at result time: warnings, anomalies (runaway turns, budget near-miss, provider errors)
+- Audit event schema — stable, versioned, human-readable audit record format for compliance
+- Provenance annotations — structured metadata on each event (model id, provider id, timestamps) for decision traceability
 
 ## Requirements
 
@@ -67,7 +69,7 @@ To be selected with `$gsd-new-milestone`. Candidate follow-ups from the shipped 
 
 ### Active
 
-No active milestone requirements. Start the next scoped set with `$gsd-new-milestone`.
+Requirements for v0.5.0 Observability and Auditability. See REQUIREMENTS.md for full REQ-ID list.
 
 ### Out of Scope
 
@@ -140,4 +142,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-01 after v0.4.0 milestone completion.*
+*Last updated: 2026-05-01 — v0.5.0 Observability and Auditability milestone started.*
