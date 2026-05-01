@@ -1142,7 +1142,8 @@ function createStreamCancellationError(providerId: string, cause?: unknown): Dog
     providerId,
     ...(cause !== undefined ? { cause } : {}),
     detail: {
-      status: "cancelled"
+      status: "cancelled",
+      reason: "parent-aborted"
     }
   });
 }

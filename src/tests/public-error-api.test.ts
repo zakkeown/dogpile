@@ -329,7 +329,10 @@ describe("public DogpileError API", () => {
 
     await expect(handle.result).rejects.toMatchObject({
       code: "aborted",
-      detail: { status: "cancelled" }
+      detail: {
+        status: "cancelled",
+        reason: "parent-aborted"
+      }
     });
   });
 
