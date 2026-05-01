@@ -73,6 +73,7 @@ it.
 | Reuse fixed settings across many runs | `Dogpile.createEngine({ protocol, tier, model })` |
 | Save and reload a completed run | Persist `result.trace`, then call `Dogpile.replay(trace)` |
 | Use direct HTTP with OpenAI-compatible servers | `createOpenAICompatibleProvider(options)` |
+| Run a coordinator that fans out into other Dogpile runs | `delegate` decision; [`docs/recursive-coordination.md`](docs/recursive-coordination.md) |
 
 ## Install
 
