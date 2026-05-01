@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase 10: Metrics / Counters — Discussion Questions</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #1e293b; font-size: 14px; line-height: 1.5; }
+  .header { background: #1e293b; color: white; padding: 20px 24px; }
+  .header h1 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .header p { font-size: 12px; color: #94a3b8; }
+  .stats-bar { background: white; border-bottom: 1px solid #e2e8f0; padding: 12px 24px; display: flex; align-items: center; gap: 24px; position: sticky; top: 0; z-index: 10; }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-value { font-size: 20px; font-weight: 700; }
+  .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-value.total { color: #1e293b; }
+  .stat-value.answered { color: #22c55e; }
+  .stat-value.remaining { color: #f97316; }
+  .progress-bar { flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #22c55e; border-radius: 4px; transition: width 0.3s ease; }
+  .save-area { background: white; border-bottom: 1px solid #e2e8f0; padding: 10px 24px; display: flex; align-items: center; gap: 12px; }
+  .save-btn { background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .save-btn:hover { background: #2563eb; }
+  .save-instructions { font-size: 12px; color: #64748b; }
+  .content { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .section { margin-bottom: 32px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 12px 16px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; user-select: none; }
+  .section-header:hover { background: #f1f5f9; }
+  .section-title { font-size: 15px; font-weight: 600; }
+  .section-meta { display: flex; align-items: center; gap: 8px; }
+  .section-progress { font-size: 12px; color: #64748b; }
+  .section-arrow { font-size: 12px; color: #94a3b8; transition: transform 0.2s; }
+  .section-arrow.collapsed { transform: rotate(-90deg); }
+  .questions-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .question-card { background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; transition: border-color 0.2s, background 0.2s; }
+  .question-card.answered { border: 2px solid #22c55e; background: #f0fdf4; }
+  .question-card.chat-more-active { border-color: #f97316; }
+  .question-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+  .question-id { background: #e2e8f0; color: #475569; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; }
+  .question-id.answered { background: #bbf7d0; color: #15803d; }
+  .question-title { font-weight: 600; font-size: 13px; line-height: 1.4; }
+  .question-context { font-size: 12px; color: #64748b; font-style: italic; margin-bottom: 12px; line-height: 1.5; }
+  .options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .option { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+  .option:hover { background: #f8fafc; border-color: #cbd5e1; }
+  .option.selected { background: #eff6ff; border-color: #3b82f6; }
+  .option input[type="radio"] { margin-top: 2px; flex-shrink: 0; accent-color: #3b82f6; }
+  .option-content { flex: 1; }
+  .option-label { font-weight: 600; font-size: 13px; }
+  .option-desc { font-size: 12px; color: #475569; margin-top: 2px; line-height: 1.4; }
+  .chat-more-label { font-size: 12px; font-weight: 500; color: #64748b; margin-bottom: 4px; }
+  .chat-more-input { width: 100%; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; font-size: 12px; font-family: inherit; resize: vertical; min-height: 60px; transition: border-color 0.2s; }
+  .chat-more-input:focus { outline: none; border-color: #3b82f6; }
+  .chat-more-input.has-content { border: 2px solid #f97316; }
+  .answered-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #15803d; font-weight: 500; margin-top: 6px; }
+  .section-collapsed .questions-grid { display: none; }
+  .download-note { font-size: 11px; color: #94a3b8; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Phase 10: Metrics / Counters — Discussion Questions</h1>
+  <p>Answer questions in any order. Save answers when done, then return to Claude and say "finalize".</p>
+</div>
+
+<div class="stats-bar">
+  <div class="stat">
+    <span class="stat-value total" id="stat-total">14</span>
+    <span class="stat-label">Total</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value answered" id="stat-answered">0</span>
+    <span class="stat-label">Answered</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value remaining" id="stat-remaining">14</span>
+    <span class="stat-label">Remaining</span>
+  </div>
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+  </div>
+</div>
+
+<div class="save-area">
+  <button class="save-btn" onclick="saveAnswers()">Save answers</button>
+  <span class="save-instructions">Saves to the JSON file — then return to Claude and say <strong>"refresh"</strong> or <strong>"finalize"</strong>.</span>
+  <span class="download-note" id="save-status"></span>
+</div>
+
+<div class="content" id="content"></div>
+
+<div class="save-area" style="border-top: 1px solid #e2e8f0; border-bottom: none; margin-top: 16px;">
+  <button class="save-btn" onclick="saveAnswers()">Save answers</button>
+  <span class="save-instructions">After saving, return to Claude and say <strong>"refresh"</strong> to process answers or <strong>"finalize"</strong> to generate CONTEXT.md.</span>
+</div>
+
+<script>
+const QUESTIONS_DATA = {
+  "phase": "10-metrics-counters",
+  "generated_at": "2026-05-01T00:00:00.000Z",
+  "sections": [
+    {
+      "id": "hook-interface",
+      "title": "MetricsHook Interface Design",
+      "questions": [
+        {
+          "id": "Q-01",
+          "title": "Hook shape — single function vs callback object",
+          "context": "METR-01 says callers 'supply a metrics hook' and receive counters 'once per completed run and once per completed sub-run.' The success criteria calls it a 'metricsHook function.' Phase 9 used a single object field (tracer?: DogpileTracer). The question is whether one function handles both run and sub-run completions, or separate callbacks allow selective subscription.",
+          "options": [
+            { "id": "a", "label": "Single function — fires for every completion event", "description": "type MetricsHook = (snapshot: RunMetricsSnapshot) => void. One field on EngineOptions, fires once per top-level run completion and once per sub-run completion. Snapshot includes context (runId, depth) so callers can distinguish. Consistent with 'metricsHook function' language in the success criteria." },
+            { "id": "b", "label": "Callback object — separate onRunComplete and onSubRunComplete", "description": "interface MetricsHook { onRunComplete?: (s: RunMetricsSnapshot) => void; onSubRunComplete?: (s: RunMetricsSnapshot) => void; }. Callers opt into run-level or sub-run-level metrics independently. More granular but adds an object type." },
+            { "id": "c", "label": "Custom", "description": "" }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-02",
+          "title": "RunMetricsSnapshot fields — counters only vs counters + context",
+          "context": "METR-01 mandates exactly five counters: inputTokens, outputTokens, costUsd, turns, durationMs. But without context fields (runId, depth, isSubRun, parentRunId), callers cannot distinguish a top-level run from a sub-run in their metrics backend. Phase 8's AuditRecord included runId and outcome for similar reasons.",
+          "options": [
+            { "id": "a", "label": "Counters only — exactly the 5 mandated fields", "description": "{ inputTokens: number; outputTokens: number; costUsd: number; turns: number; durationMs: number }. Minimal surface. Callers who need run identity wrap the hook themselves." },
+            { "id": "b", "label": "Counters + run identity — 5 counters plus runId, depth, isSubRun", "description": "Add runId: string; depth: number; isSubRun: boolean; parentRunId?: string to the snapshot. Callers can tag metrics with run identity without building a wrapper. Each field is directly available at the integration point." },
+            { "id": "c", "label": "Counters + terminal outcome — 5 counters plus outcome field", "description": "Add outcome: 'completed' | 'budget-stopped' | 'aborted'. Lets callers filter or label metrics by how the run ended. Useful if the hook fires for all terminal states (see Q-10)." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-03",
+          "title": "Async support — sync-only vs void | Promise<void>",
+          "context": "Many metrics backends (Prometheus push, DataDog statsd) are fire-and-forget sync calls. But some callers may want to await a database write. The Logger interface is sync-only. If we allow Promise<void>, the SDK must decide whether to await it (blocks run completion) or fire-and-forget it (unhandled rejection risk).",
+          "options": [
+            { "id": "a", "label": "Sync only — (snapshot) => void", "description": "Consistent with Logger interface. Callers who need async fire-and-forget internally. Simple throw-isolation: try/catch wraps the sync call." },
+            { "id": "b", "label": "Async allowed — (snapshot) => void | Promise<void>, awaited", "description": "SDK awaits the return value if it's a Promise. Metrics hook latency adds to run completion time. Error isolation: catch the awaited promise." },
+            { "id": "c", "label": "Async allowed — fire-and-forget (not awaited)", "description": "SDK checks if return is a Promise and calls .catch(...) but does not await. Run completion is not delayed. Risk: callers may miss errors." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-04",
+          "title": "Error isolation — how does a throwing hook route the error?",
+          "context": "SC-3 says 'the error is routed to the logger's error channel.' EngineOptions currently has no logger field. Options range from console.error (no new surface) to adding logger?: Logger to EngineOptions (new public surface, consistent with the existing Logger interface from @dogpile/sdk/runtime/logger).",
+          "options": [
+            { "id": "a", "label": "console.error — no new public surface", "description": "try/catch wraps the hook; errors go to console.error. No EngineOptions change. Satisfies the spirit of SC-3 without requiring logger injection." },
+            { "id": "b", "label": "Add logger?: Logger to EngineOptions — proper injection", "description": "New public-surface field logger?: Logger (same Logger interface from @dogpile/sdk/runtime/logger). Hook errors go to logger.error('dogpile:metricsHook threw'). Enables debug/info engine logging in future phases. Requires CHANGELOG + CLAUDE.md update." },
+            { "id": "c", "label": "Silent swallow — catch and drop", "description": "try/catch wraps the hook; errors are silently dropped. No log output, no new surface. Callers have no visibility into hook failures." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    },
+    {
+      "id": "counter-semantics",
+      "title": "Counter Fields and Semantics",
+      "questions": [
+        {
+          "id": "Q-05",
+          "title": "'turns' field — which events count as a turn?",
+          "context": "The success criteria names 'turns' but doesn't define it. For sequential/coordinator/shared, each agent-turn event is one turn. For broadcast, each broadcast event covers all agents in parallel in one round. The Trace already has usage.turns and cost via RunResult. Researcher should confirm the exact field on Trace that carries turn count vs deriving from event filtering.",
+          "options": [
+            { "id": "a", "label": "agent-turn events only — count of TurnEvent entries in trace.events", "description": "Filter trace.events for type === 'agent-turn' and count. For broadcast: each parallel agent gets its own TurnEvent, so 3-agent broadcast = 3 turns. Consistent with per-agent accounting in health diagnostics." },
+            { "id": "b", "label": "Round-based — TurnEvent for sequential/coordinator, BroadcastEvent round count", "description": "For broadcast: count broadcast-round events. Represents 'how many coordination rounds' rather than 'how many agent turns.' Different metric semantics." },
+            { "id": "c", "label": "Use result.usage.turns directly if available on the Trace struct", "description": "If Trace or RunResult already carries an aggregate turn count, use it. Avoids divergence. Researcher should verify if Trace.usage or similar field exists." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-06",
+          "title": "'durationMs' source — wall clock vs provenance timestamps",
+          "context": "REQUIREMENTS.md excludes perf_hooks and process.hrtime (Node-only). Options are Date.now() (cross-runtime, used for timeout tracking in engine.ts already) or Phase 6 provenance timestamps (startedAt from trace/RunMetadata). Researcher must confirm which timestamp fields exist on Trace.",
+          "options": [
+            { "id": "a", "label": "Date.now() wall-clock — record startedAt when runNonStreamingProtocol begins", "description": "const startedAt = Date.now() at run start; durationMs = Date.now() - startedAt at result assembly. Cross-runtime, mirrors existing startedAtMs already in engine.ts." },
+            { "id": "b", "label": "Derived from Trace/RunMetadata timestamps", "description": "Use trace.runMetadata.startedAt and completedAt (or equivalent fields) to compute durationMs. More accurate. Researcher must confirm these fields exist on Trace." },
+            { "id": "c", "label": "Date.now() for top-level; trace metadata for sub-runs", "description": "Top-level: Date.now() delta. Sub-runs: derive from subResult.trace timestamps if available (cleaner since SubRunCompletedEvent.subResult already has the full result)." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-07",
+          "title": "Sub-run counter scope — own-only vs cumulative subtree",
+          "context": "SubRunCompletedEvent.subResult.cost already reflects the cumulative cost of the entire child subtree (rolled up in Phase 2). 'Own-only' would require subtracting nested child costs. Callers building a metrics dashboard for deep coordinator trees need to know whether to de-duplicate parent vs child counters.",
+          "options": [
+            { "id": "a", "label": "Cumulative — use subResult.cost directly (includes nested sub-sub-runs)", "description": "No extra computation. subResult.cost.inputTokens/.outputTokens/.usd already roll up the full subtree. Callers who want per-level metrics must track depth themselves. Double-counting is possible if callers sum all hook calls naively." },
+            { "id": "b", "label": "Own-only — counters reflect the sub-run's direct work, excluding children", "description": "Requires computing subRunCost - sum(childSubRunCosts). More complex but lets callers sum all hook calls without double-counting. Researcher should check if the Trace structure makes this derivation easy." },
+            { "id": "c", "label": "Both — snapshot includes own and total fields", "description": "ownInputTokens/ownOutputTokens/ownCostUsd AND totalInputTokens/totalOutputTokens/totalCostUsd. Maximum flexibility; doubles the counter fields on the snapshot." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    },
+    {
+      "id": "integration-architecture",
+      "title": "Integration Architecture",
+      "questions": [
+        {
+          "id": "Q-08",
+          "title": "Integration point for top-level run hook call",
+          "context": "Phase 9 OTEL integration point is runNonStreamingProtocol — spans open before runProtocol, close after result assembly. The metrics hook for top-level runs should fire at the same point: after result is fully assembled (health attached, accounting finalized). For sub-runs the hook fires on sub-run-completed events in the emit closure.",
+          "options": [
+            { "id": "a", "label": "After result assembly in runNonStreamingProtocol", "description": "Call metricsHook(buildSnapshot(result, durationMs)) at the end of runNonStreamingProtocol (after health/accounting attached). Sub-runs use emit callback on sub-run-completed. Parallel with Phase 9 OTEL approach." },
+            { "id": "b", "label": "Inside runProtocol via the emit callback for all depths", "description": "For sub-runs: intercept sub-run-completed in emit closure. For top-level: emit a synthetic internal event or add a hook call site at the end of runProtocol. Uniform event-driven approach." },
+            { "id": "c", "label": "Custom", "description": "" }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-09",
+          "title": "metricsHook on DogpileOptions — mirror the tracer pattern?",
+          "context": "Phase 9 added tracer to both EngineOptions and DogpileOptions (mirrored-surface pattern). DogpileOptions is the high-level entry point used by most callers via Dogpile.pile(). EngineOptions is the low-level engine config. Mirroring keeps surfaces consistent but requires two type edits + validation updates.",
+          "options": [
+            { "id": "a", "label": "Mirror on both EngineOptions and DogpileOptions", "description": "metricsHook?: MetricsHook on both. Consistent with tracer pattern. Callers using Dogpile.pile() can provide the hook directly." },
+            { "id": "b", "label": "EngineOptions only — DogpileOptions does not mirror", "description": "Callers using Dogpile.pile() must drop to createEngine to access metrics. Could be confusing given that tracer is on DogpileOptions." },
+            { "id": "c", "label": "DogpileOptions only — EngineOptions mirrors from it", "description": "Put metricsHook only on the high-level API. Unusual given existing patterns — EngineOptions is where engine-level options live." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    },
+    {
+      "id": "terminal-state-coverage",
+      "title": "Terminal State Coverage",
+      "questions": [
+        {
+          "id": "Q-10",
+          "title": "Hook fires for budget-stopped and aborted runs?",
+          "context": "METR-01 says the hook fires 'at run and sub-run completion.' Does 'completion' mean only outcome=completed, or all terminal states? Budget-stopped runs have full token and cost data. Aborted runs may have partial data. Phase 8 AuditRecord was produced regardless of terminal state.",
+          "options": [
+            { "id": "a", "label": "All terminal states — completed, budget-stopped, and aborted", "description": "Hook fires whenever a run reaches any terminal state. For aborted runs, counters reflect partial work done. Callers check outcome field (requires Q-02 to include outcome) to filter." },
+            { "id": "b", "label": "Completed + budget-stopped only — not aborted", "description": "Budget-stopped runs have definitive cost/token totals (the run wound down cleanly at a cap). Aborted runs skip the hook. Balances coverage with data reliability." },
+            { "id": "c", "label": "Completed only", "description": "Strictest interpretation of 'completion.' Simplest implementation — fire the hook only inside the successful result assembly path." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-11",
+          "title": "Hook fires for failed sub-runs (sub-run-failed events)?",
+          "context": "sub-run-failed events carry a partial Trace (not a full RunResult). SubRunFailedEvent has error and a partial trace but not a cost rollup like SubRunCompletedEvent.subResult.cost. The OTEL bridge (Phase 9) emitted an ERROR-status span for sub-run-failed — but a span is cheaper to emit than a full counter computation.",
+          "options": [
+            { "id": "a", "label": "Yes — fire hook for sub-run-failed with partial counters", "description": "Compute counters from the partial trace. Provides visibility into failed sub-run costs. Partial counters may be 0 or incomplete for early failures." },
+            { "id": "b", "label": "No — skip hook for sub-run-failed, fire only on sub-run-completed", "description": "Partial counter data is unreliable. Skip for sub-run-failed. Callers who need failed-sub-run costs can inspect the partial trace from DogpileError." },
+            { "id": "c", "label": "Custom", "description": "" }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    },
+    {
+      "id": "public-surface",
+      "title": "Public Surface and Testing",
+      "questions": [
+        {
+          "id": "Q-12",
+          "title": "Subpath export — /runtime/metrics or root-only?",
+          "context": "The established pattern: /runtime/provenance, /runtime/introspection, /runtime/health, /runtime/audit, /runtime/tracing — every phase adds a subpath. Phase 10 would add /runtime/metrics for MetricsHook and RunMetricsSnapshot. The types are simple; the subpath might feel over-engineered, but breaking the pattern would be inconsistent.",
+          "options": [
+            { "id": "a", "label": "New /runtime/metrics subpath — follow the established pattern", "description": "src/runtime/metrics.ts + package.json exports + files + package-exports.test.ts + CHANGELOG + CLAUDE.md. Consistent with every prior phase." },
+            { "id": "b", "label": "Root-only export — no new subpath", "description": "MetricsHook and RunMetricsSnapshot exported from the root package only. Simpler packaging. The types are simple enough that a dedicated subpath adds overhead without real benefit." },
+            { "id": "c", "label": "Both — root export and /runtime/metrics subpath", "description": "Root re-exports the types, plus a /runtime/metrics subpath for consumers who import by subpath. Matches health/introspection/audit pattern." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-13",
+          "title": "Root-exported types — which Phase 10 types go in src/index.ts?",
+          "context": "Phase 7 root-exported AnomalyCode, HealthAnomaly, RunHealthSummary. Phase 9 will root-export DogpileTracer, DogpileSpan, DogpileSpanOptions. For Phase 10: MetricsHook and RunMetricsSnapshot are the primary types. Should they be root-exported for callers who want type annotations without knowing the subpath?",
+          "options": [
+            { "id": "a", "label": "Root-export MetricsHook and RunMetricsSnapshot", "description": "Both types in src/index.ts exports. Consistent with DogpileTracer and AuditRecord being root-exported. Callers who annotate typed hooks don't need to know the subpath." },
+            { "id": "b", "label": "Root-export MetricsHook only", "description": "The hook type is what callers put on EngineOptions — root-export that. RunMetricsSnapshot is the callback arg type — callers annotating it import from the subpath." },
+            { "id": "c", "label": "Subpath-only — no root exports for Phase 10 types", "description": "All Phase 10 types live in @dogpile/sdk/runtime/metrics. Callers using Dogpile.pile() typically write inline arrow functions and don't need the type annotation." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        },
+        {
+          "id": "Q-14",
+          "title": "Frozen fixture for RunMetricsSnapshot shape?",
+          "context": "Pattern: Phase 6 → provenance-event-v1.json; Phase 7 → health-anomaly-v1.json; Phase 8 → audit-record-v1.json. Each protects its public type shape. RunMetricsSnapshot is simpler (5–10 primitive fields). Phase 9 OTEL bridge did not ship a frozen fixture (DogpileTracer is an interface, not a data shape). The question is whether the data shape warrants fixture protection.",
+          "options": [
+            { "id": "a", "label": "Yes — freeze a metrics-snapshot-v1.json fixture", "description": "src/tests/fixtures/metrics-snapshot-v1.json + companion metrics-snapshot-v1.type-check.ts with satisfies RunMetricsSnapshot. Prevents silent field renames from breaking callers. Consistent with the pattern." },
+            { "id": "b", "label": "No — type-check only, no JSON fixture", "description": "The shape is simple primitives. TypeScript strict mode + integration test that asserts snapshot fields achieves the same regression coverage without a frozen JSON file." },
+            { "id": "c", "label": "Conditional — freeze only if snapshot has non-trivial fields (Q-02 b or c)", "description": "If the snapshot includes only 5 numbers, skip the fixture. If it includes context fields (runId, depth, outcome) that callers might serialize and store, freeze it." }
+          ],
+          "answer": null, "chat_more": "", "status": "unanswered"
+        }
+      ]
+    }
+  ]
+};
+
+let state = JSON.parse(JSON.stringify(QUESTIONS_DATA));
+
+function buildUI() {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+  state.sections.forEach(section => {
+    const sectionEl = document.createElement('div');
+    sectionEl.className = 'section';
+    sectionEl.id = 'section-' + section.id;
+
+    const answeredInSection = section.questions.filter(q => q.answer).length;
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.innerHTML = `
+      <span class="section-title">${section.title}</span>
+      <span class="section-meta">
+        <span class="section-progress" id="section-progress-${section.id}">${answeredInSection}/${section.questions.length} answered</span>
+        <span class="section-arrow" id="section-arrow-${section.id}">▼</span>
+      </span>`;
+    header.onclick = () => toggleSection(section.id);
+    sectionEl.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'questions-grid';
+    grid.id = 'questions-' + section.id;
+
+    section.questions.forEach(q => {
+      const card = buildCard(q);
+      grid.appendChild(card);
+    });
+
+    sectionEl.appendChild(grid);
+    content.appendChild(sectionEl);
+  });
+  updateStats();
+}
+
+function buildCard(q) {
+  const card = document.createElement('div');
+  card.className = 'question-card' + (q.answer ? ' answered' : '');
+  card.id = 'card-' + q.id;
+
+  let optionsHtml = q.options.map(opt => `
+    <label class="option${q.answer === opt.id ? ' selected' : ''}">
+      <input type="radio" name="${q.id}" value="${opt.id}" ${q.answer === opt.id ? 'checked' : ''} onchange="selectOption('${q.id}', '${opt.id}')">
+      <div class="option-content">
+        <div class="option-label">${opt.id.toUpperCase()}. ${opt.label}</div>
+        ${opt.description ? `<div class="option-desc">${opt.description}</div>` : ''}
+      </div>
+    </label>`).join('');
+
+  const chatMoreHasContent = q.chat_more && q.chat_more.trim().length > 0;
+  card.innerHTML = `
+    <div class="question-header">
+      <span class="question-id${q.answer ? ' answered' : ''}">${q.id}</span>
+      <span class="question-title">${q.title}</span>
+    </div>
+    <div class="question-context">${q.context}</div>
+    <div class="options">${optionsHtml}</div>
+    <div class="chat-more-label">Add context or nuance (optional)</div>
+    <textarea class="chat-more-input${chatMoreHasContent ? ' has-content' : ''}"
+      id="chatmore-${q.id}"
+      placeholder="Add context, nuance, or clarification for this question..."
+      oninput="updateChatMore('${q.id}', this.value)">${q.chat_more || ''}</textarea>
+    ${q.answer ? '<div class="answered-badge">✓ Answered</div>' : ''}`;
+  return card;
+}
+
+function selectOption(questionId, optionId) {
+  const sectionId = findSection(questionId);
+  const section = state.sections.find(s => s.id === sectionId);
+  const q = section.questions.find(q => q.id === questionId);
+  q.answer = optionId;
+  q.status = 'answered';
+
+  const card = document.getElementById('card-' + questionId);
+  card.className = 'question-card answered' + (q.chat_more && q.chat_more.trim() ? ' chat-more-active' : '');
+
+  card.querySelectorAll('.option').forEach(opt => opt.classList.remove('selected'));
+  card.querySelectorAll('input[type="radio"]').forEach(radio => {
+    if (radio.value === optionId) {
+      radio.closest('.option').classList.add('selected');
+    }
+  });
+
+  const idEl = card.querySelector('.question-id');
+  if (idEl) idEl.className = 'question-id answered';
+
+  const badge = card.querySelector('.answered-badge');
+  if (!badge) {
+    const b = document.createElement('div');
+    b.className = 'answered-badge';
+    b.textContent = '✓ Answered';
+    card.appendChild(b);
+  }
+
+  updateSectionProgress(sectionId);
+  updateStats();
+}
+
+function updateChatMore(questionId, value) {
+  const sectionId = findSection(questionId);
+  const section = state.sections.find(s => s.id === sectionId);
+  const q = section.questions.find(q => q.id === questionId);
+  q.chat_more = value;
+  if (value.trim()) {
+    q.status = q.answer ? 'answered' : 'chat-more';
+  } else {
+    q.status = q.answer ? 'answered' : 'unanswered';
+  }
+  const textarea = document.getElementById('chatmore-' + questionId);
+  if (textarea) {
+    textarea.className = 'chat-more-input' + (value.trim() ? ' has-content' : '');
+  }
+  updateStats();
+}
+
+function findSection(questionId) {
+  for (const section of state.sections) {
+    if (section.questions.some(q => q.id === questionId)) return section.id;
+  }
+  return null;
+}
+
+function updateSectionProgress(sectionId) {
+  const section = state.sections.find(s => s.id === sectionId);
+  if (!section) return;
+  const answered = section.questions.filter(q => q.answer).length;
+  const el = document.getElementById('section-progress-' + sectionId);
+  if (el) el.textContent = `${answered}/${section.questions.length} answered`;
+}
+
+function updateStats() {
+  let answered = 0, chatMore = 0, total = 0;
+  state.sections.forEach(s => s.questions.forEach(q => {
+    total++;
+    if (q.answer) answered++;
+    if (q.chat_more && q.chat_more.trim()) chatMore++;
+  }));
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-answered').textContent = answered;
+  document.getElementById('stat-remaining').textContent = total - answered;
+  document.getElementById('progress-fill').style.width = total > 0 ? (answered / total * 100) + '%' : '0%';
+  state.stats = { total, answered, chat_more: chatMore, remaining: total - answered };
+}
+
+function toggleSection(sectionId) {
+  const grid = document.getElementById('questions-' + sectionId);
+  const arrow = document.getElementById('section-arrow-' + sectionId);
+  const sectionEl = document.getElementById('section-' + sectionId);
+  if (grid.style.display === 'none') {
+    grid.style.display = 'grid';
+    arrow.classList.remove('collapsed');
+  } else {
+    grid.style.display = 'none';
+    arrow.classList.add('collapsed');
+  }
+}
+
+async function saveAnswers() {
+  const jsonStr = JSON.stringify(state, null, 2);
+  const statusEl = document.getElementById('save-status');
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: '10-QUESTIONS.json',
+        types: [{ description: 'JSON file', accept: { 'application/json': ['.json'] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(jsonStr);
+      await writable.close();
+      statusEl.textContent = '✓ Saved via File System Access API';
+      return;
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn('File System API failed:', e);
+    }
+  }
+
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '10-QUESTIONS.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  statusEl.textContent = '⬇ Downloaded — replace .planning/phases/10-metrics-counters/10-QUESTIONS.json with this file, then say "refresh" in Claude.';
+}
+
+buildUI();
+</script>
+</body>
+</html>
