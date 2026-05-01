@@ -575,7 +575,7 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
             dispatchResults.push({ index, result });
           } catch (error) {
             firstFailureIndex ??= index;
-            if (delegates.length === 1) {
+            if (delegates.length === 1 && options.onChildFailure === "abort") {
               throw error;
             }
             const dispatchedChild = dispatchedForTurn[index];
@@ -600,7 +600,7 @@ export async function runCoordinator(options: CoordinatorRunOptions): Promise<Ru
         });
         const settled = await Promise.allSettled(tasks);
         const firstRejected = settled.find((result) => result.status === "rejected");
-        if (firstRejected?.status === "rejected" && delegates.length === 1) {
+        if (firstRejected?.status === "rejected" && delegates.length === 1 && options.onChildFailure === "abort") {
           throw firstRejected.reason;
         }
 

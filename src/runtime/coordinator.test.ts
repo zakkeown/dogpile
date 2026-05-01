@@ -952,6 +952,37 @@ describe("coordinator delegate dispatch", () => {
     );
   });
 
+  it("default continue mode carries a single child failure into the next prompt", async () => {
+    const planRequests: ModelRequest[] = [];
+    const provider = createFailureContextProvider({
+      id: "single-child-continue-model",
+      failureIntents: new Set(["fail only child"]),
+      planResponses: [
+        delegateBlock({ protocol: "sequential", intent: "fail only child" }),
+        PARTICIPATE_OUTPUT
+      ],
+      recordedRequests: planRequests
+    });
+
+    await run({
+      intent: "Continue after one child failure by default.",
+      protocol: { kind: "coordinator", maxTurns: 2 },
+      tier: "fast",
+      model: provider,
+      agents: [
+        { id: "lead", role: "coordinator" },
+        { id: "worker-a", role: "worker" }
+      ]
+    });
+
+    const planPrompts = planRequests.filter((request) => request.metadata.phase === "plan");
+    const followUpPrompt = planPrompts[1]?.messages.find((message) => message.role === "user")?.content ?? "";
+
+    expect(planPrompts).toHaveLength(2);
+    expect(followUpPrompt).toContain("## Sub-run failures since last decision");
+    expect(followUpPrompt).toContain("fail only child exploded");
+  });
+
   it("abort short-circuit snapshots the first observed triggering failure", async () => {
     const planRequests: ModelRequest[] = [];
     const provider = createFailureContextProvider({
