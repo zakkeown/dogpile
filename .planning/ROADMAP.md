@@ -82,7 +82,11 @@ Plans:
 1. Calling the audit function on a completed trace returns an object with `auditSchemaVersion: "1"` plus run-level fields (run id, intent, timestamps, agent count, outcome, cost).
 2. `AuditRecord` is a standalone exported type — callers can import and reference it without importing any `RunEvent` variant.
 3. A frozen JSON fixture (`src/tests/fixtures/audit-record-v1.json`) exists and the test suite rejects any schema change that is not accompanied by an explicit fixture update.
-**Plans:** TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 08-01-PLAN.md — AuditRecord types + createAuditRecord implementation + co-located unit tests
+- [ ] 08-02-PLAN.md — Frozen fixture (audit-record-v1.json) + type-check.ts + shape test
+- [ ] 08-03-PLAN.md — Public-surface lockstep: /runtime/audit subpath + package-exports.test.ts + CHANGELOG + CLAUDE.md
 
 ### Phase 9: OTEL Tracing Bridge
 **Goal:** Callers can inject an optional duck-typed OTEL-compatible tracer on `EngineOptions`; when present the SDK emits spans for run start/end, sub-run start/end, and agent turn start/end with correct parent-child ancestry; when absent runs complete with zero span overhead.
@@ -111,7 +115,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 6. Provenance Annotations | 6/6 | Complete | 2026-05-01 |
 | 7. Structured Event Introspection + Health Diagnostics | 3/5 | In Progress | — |
-| 8. Audit Event Schema | 0/? | Not started | — |
+| 8. Audit Event Schema | 0/3 | Not started | — |
 | 9. OTEL Tracing Bridge | 0/? | Not started | — |
 | 10. Metrics / Counters | 0/? | Not started | — |
 
@@ -130,4 +134,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-05-01 — Phase 7 plan 07-03 complete: computeHealth implemented and tested.*
+*Last updated: 2026-05-01 — Phase 8 planned: 3 plans, 3 waves.*
