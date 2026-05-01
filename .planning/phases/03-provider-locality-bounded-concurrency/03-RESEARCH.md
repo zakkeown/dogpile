@@ -349,20 +349,21 @@ export interface SubRunConcurrencyClampedEvent {
 ### Pattern 6: `parentDecisionId` for Fan-Out (collision fix)
 
 **What:** Current scheme at coordinator.ts:255 uses `String(events.length - 1)` — correct for single-delegate turns, but produces the SAME id for all N delegates from one fan-out turn.
-**Fix:** At plan-turn dispatch time, compute a stable composite id:
+
+**Recommended fix (additive, non-breaking):** Add `parentDecisionArrayIndex: number` to the new `sub-run-queued`, `sub-run-started`, `sub-run-completed`, `sub-run-failed` events for delegates that originate from a fan-out array. Single-delegate turns use `parentDecisionArrayIndex: 0`. The existing `parentDecisionId` string format (`String(events.length - 1)`) is preserved for `parentDecisionId` — no format change, no test breakage.
 
 ```typescript
-// coordinator.ts — at fan-out dispatch point
-const planTurnEventIndex = events.length - 1; // index of the agent-turn event
-// For each delegate at array index i:
-const parentDecisionId = `${planTurnEventIndex}-${delegateArrayIndex}`;
-// e.g., "42-0", "42-1", "42-2"
-// Single-delegate backward compat: for legacy single-object decisions, use "42-0"
-// (identical to old String(planTurnEventIndex) only if treated as opaque string — update
-//  any test assertions that rely on the exact format)
+// On new sub-run-* events (Phase 3 fan-out path only):
+// parentDecisionId: String(planTurnAgentTurnEventIndex)  // unchanged format
+// parentDecisionArrayIndex: 0 | 1 | 2 | ...             // NEW additive field
+//
+// Together these two fields uniquely identify a delegate within a fan-out:
+//   parentDecisionId "42" + parentDecisionArrayIndex 2 → 3rd delegate from plan turn 42
 ```
 
-**Important:** This changes the `parentDecisionId` string format for ALL delegate dispatches (single and array). Existing event-schema tests must be updated to accept the new format or made format-agnostic.
+**Why additive over composite string:** Existing tests in `event-schema.test.ts` and `result-contract.test.ts` use opaque strings for `parentDecisionId` (e.g., `"decision-1"`, `"decision-7"`) — not the `String(events.length - 1)` runtime format. [VERIFIED: grep confirmed no numeric-only assertions on parentDecisionId]. However, changing the string format is still a public-API surface change for any downstream consumers reading `parentDecisionId` from a `Trace`. Adding a new field is strictly additive and sidesteps the issue entirely.
+
+**BLOCKS Plan 03-02:** Planner must choose and lock this approach before writing the first task. Composite string and additive field are both viable; additive field is the safer default for a public-API-first SDK.
 
 ### Pattern 7: defaults.ts Exhaustive Switch Updates
 
@@ -398,7 +399,7 @@ Note: `ReplayTraceProtocolDecisionType` must also gain these two new string lite
 
 - **Emitting `sub-run-queued` when slot is immediately free:** D-07 explicitly forbids this. Check `semaphore.inFlight < effective` before emitting queued event. Tests must cover both paths.
 - **Re-emitting `subRun.concurrencyClamped` on every dispatch:** D-12 specifies one emission per run. State flag on run accumulator, not module-level.
-- **Using `String(events.length - 1)` for `parentDecisionId` in fan-out:** Produces the same id for all N delegates from one plan turn. Use composite `"${planTurnEventIndex}-${delegateArrayIndex}"` format.
+- **Using `String(events.length - 1)` for `parentDecisionId` in fan-out:** Produces the same id for all N delegates from one plan turn. Preferred fix: add `parentDecisionArrayIndex: number` as an additive field to fan-out sub-run events (see Pattern 6). Alternative: composite string `"${planTurnEventIndex}-${delegateArrayIndex}"`. Planner must decide and lock before Plan 03-02 Wave 1.
 - **Aborting in-flight siblings on failure:** D-09 is explicit — let in-flight finish. Synthetic `sub-run-failed` events drain ONLY the queue (never-started delegates).
 - **Walking `agent.model.metadata?.locality` before `AgentSpec` has a `model` field:** `AgentSpec` at types.ts:687 has no `model` field today. The D-11 walk reduces to `options.model.metadata?.locality` only. The multi-agent walk is forward-compat scaffolding; use optional chaining with `?.` throughout.
 - **Accumulating cost for synthetic sibling-failed events:** D-09 note says `partialCost = emptyCost()`. `accumulateSubRunCost` already handles `sub-run-failed` — pass `emptyCost()` so the accumulation contributes zero.
@@ -421,11 +422,11 @@ Step 2.5: SKIPPED — not a rename/refactor/migration phase. This is a greenfiel
 
 ## Common Pitfalls
 
-### Pitfall 1: AgentSpec Has No `model` Field
-**What goes wrong:** D-11 says "walk every `agent.model.metadata?.locality`" but `AgentSpec` at `src/types.ts:687` has no `model` field today. [VERIFIED: grep found no `model` on AgentSpec]
-**Why it happens:** The CONTEXT.md references `src/types.ts:1758, 1830` for `Agent.model` but those lines don't exist as described — `AgentSpec` is a distinct type from `Agent` in the run context.
-**How to avoid:** D-11's locality walk today is `options.model.metadata?.locality` ONLY. The multi-agent walk (`options.agents[*].model`) is forward-compat scaffolding using `?.` everywhere. Plan 03-03 should document this explicitly in comments.
-**Warning signs:** TypeScript error accessing `agent.model` on `AgentSpec` type.
+### Pitfall 1: AgentSpec Has No `model` Field — D-11 Walk Is Partially Forward-Compat
+**What goes wrong:** D-11 says "walk every `agent.model.metadata?.locality`" but `AgentSpec` at `src/types.ts:687` has no `model` field. `CoordinatorRunOptions.agents` is `readonly AgentSpec[]`, and `AgentSpec` only has `id`, `role`, and `instructions?`. [VERIFIED: grep and Read of types.ts:687]
+**Clarification on CONTEXT.md refs:** CONTEXT.md references `src/types.ts:1758` (`DogpileOptions.protocol`) and `:1830` (`EngineOptions.protocol`) as anchors for D-11. Neither is an `Agent.model` field. The relevant anchor is `CoordinatorRunOptions.model: ConfiguredModelProvider` at coordinator.ts:91 — the coordinator's active provider. [VERIFIED: Read of coordinator.ts:87-93]
+**How to avoid:** D-11's locality walk today is `options.model.metadata?.locality` ONLY. The multi-agent walk (`options.agents[*].model`) requires optional chaining (`?.`) and will simply never trip until `AgentSpec` gains a `model` field in a future phase. Plan 03-03 should document this explicitly in comments: `// options.agents walk forward-compat; AgentSpec.model not yet available`.
+**Warning signs:** TypeScript error accessing `agent.model` on `AgentSpec` type — this IS a type error today, confirming the walk is forward-compat only.
 
 ### Pitfall 2: `parentDecisionId` Collision in Fan-Out
 **What goes wrong:** Current code at coordinator.ts:255: `const parentDecisionId = String(events.length - 1)`. For a 3-delegate fan-out from one plan turn, all three delegates get the same `parentDecisionId`.
@@ -549,18 +550,18 @@ const expectedEventTypes = [
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | `AgentSpec` at types.ts:687 has no `model` field; D-11's multi-agent locality walk is forward-compat scaffolding only today | Architecture Patterns | If AgentSpec does have a model field, Plan 03-03 can add the full multi-agent walk immediately — no architectural change, just remove the forward-compat note |
+| A1 | `AgentSpec` at types.ts:687 has no `model` field (verified via Read); CONTEXT.md lines 1758/1830 are `DogpileOptions.protocol`/`EngineOptions.protocol` fields, not Agent.model; D-11's multi-agent locality walk is forward-compat only | Architecture Patterns | VERIFIED correct — `AgentSpec` read confirmed no model field; coordinator.ts:91 `CoordinatorRunOptions.model` is the actual walk target |
 | A2 | `ReplayTraceProtocolDecisionType` is a string union that needs two new literals for the new event types | Don't Hand-Roll / defaults.ts | If it's a generic `string`, no update needed — minor planner effort difference |
-| A3 | `parentDecisionId` format change (from `"42"` to `"42-0"`) is safe for single-delegate backward compat because consumers treat it as an opaque string | Common Pitfalls | If any test asserts the exact numeric string format of `parentDecisionId`, those tests need updating |
+| A3 | `parentDecisionId` test fixtures use opaque strings (`"decision-1"`, not `"42"`) so the runtime format is not asserted by existing tests | Common Pitfalls | VERIFIED: grep of event-schema.test.ts and result-contract.test.ts confirmed fixture strings are opaque; runtime format change would be safe but additive field is still preferred |
 
 *All remaining claims tagged [VERIFIED] above were confirmed against actual source files in this session.*
 
 ## Open Questions
 
-1. **`parentDecisionArrayIndex` vs. composite string for `parentDecisionId`**
-   - What we know: D-10 says "stable `parentDecisionId` at dispatch time"; current `String(events.length - 1)` collides
-   - What's unclear: Whether to add a separate `parentDecisionArrayIndex: number` field on new sub-run events (additive, non-breaking) OR change `parentDecisionId` to composite string format
-   - Recommendation: Composite string `"${planTurnEventIndex}-${delegateArrayIndex}"` is the minimal-surface option (one field, no new field on event shapes). Flag for planner to confirm before cutting Plan 03-02.
+1. **BLOCKS Plan 03-02: `parentDecisionArrayIndex` field vs. composite `parentDecisionId` string**
+   - What we know: D-10 requires stable per-delegate identity; current `String(events.length - 1)` at coordinator.ts:255 produces the same id for all N delegates from one fan-out turn. Test fixtures use opaque strings (`"decision-1"` etc.), NOT the runtime `String(events.length - 1)` format [VERIFIED].
+   - What's unclear: Whether the public event surface should gain `parentDecisionArrayIndex: number` (additive, new field on sub-run-* events) OR change `parentDecisionId` to composite format (smaller surface, but changes an existing field).
+   - Recommendation: **Additive `parentDecisionArrayIndex: number` field is the safer default.** It is strictly non-breaking (new optional field), unambiguous, and requires updating D-14's public-surface inventory (+1 field on sub-run-* events). Composite string is viable but changes an existing field's format — a subtler public-API change. Planner must confirm before Plan 03-02 Wave 1 starts.
 
 2. **`ReplayTraceProtocolDecisionType` union literal updates**
    - What we know: `defaultProtocolDecision` at defaults.ts:468 returns `ReplayTraceProtocolDecisionType`; two new event types need mappings
