@@ -88,7 +88,7 @@ Plans:
 - [x] 08-01-PLAN.md — AuditRecord types + createAuditRecord implementation + co-located unit tests
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 08-02-PLAN.md — Frozen fixture (audit-record-v1.json) + type-check.ts + shape test
+- [x] 08-02-PLAN.md — Frozen fixture (audit-record-v1.json) + type-check.ts + shape test
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 08-03-PLAN.md — Public-surface lockstep: /runtime/audit subpath + package-exports.test.ts + CHANGELOG + CLAUDE.md
