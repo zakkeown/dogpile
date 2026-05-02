@@ -6,7 +6,7 @@ import {
   type ReadableSpan
 } from "@opentelemetry/sdk-trace-base";
 import { describe, expect, it } from "vitest";
-import { run } from "../runtime/engine.js";
+import { replay, run } from "../runtime/engine.js";
 import {
   DOGPILE_SPAN_NAMES,
   type DogpileSpan,
@@ -218,6 +218,24 @@ describe("OTEL tracing bridge contract", () => {
     expect(result.trace.runId).toBeTypeOf("string");
     expect(result.health).toBeDefined();
     expect(result.cost).toBeDefined();
+  });
+
+  it("emits no spans when replay() is called on a trace from a tracer-configured run", async () => {
+    const { tracer, exporter, provider } = makeTracerWithExporter();
+
+    const result = await run({
+      intent: "replay tracing guard",
+      model: createDeterministicModelProvider("replay-tracing-guard"),
+      protocol: { kind: "sequential", maxTurns: 1 },
+      tracer
+    });
+    await provider.forceFlush();
+    exporter.reset();
+
+    replay(result.trace);
+    await provider.forceFlush();
+
+    expect(exporter.getFinishedSpans()).toHaveLength(0);
   });
 
   it("keeps the RunResult shape unchanged when tracer is present", async () => {

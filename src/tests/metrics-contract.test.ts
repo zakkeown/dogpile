@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { run, stream } from "../runtime/engine.js";
+import { replay, run, stream } from "../runtime/engine.js";
 import type { Logger } from "../runtime/logger.js";
 import type { RunMetricsSnapshot } from "../runtime/metrics.js";
 import {
@@ -181,6 +181,30 @@ describe("MetricsHook public contract (METR-01)", () => {
       totalCostUsd: 0,
       turns: 0
     });
+  });
+});
+
+describe("MetricsHook replay exclusion (METR-02)", () => {
+  it("does not fire metricsHook when replay() is called on a completed trace", async () => {
+    let callCount = 0;
+    const result = await run({
+      intent: "replay metrics exclusion guard",
+      model: createDeterministicModelProvider("replay-metrics-exclusion"),
+      protocol: { kind: "sequential", maxTurns: 1 },
+      metricsHook: {
+        onRunComplete(): void {
+          callCount++;
+        }
+      }
+    });
+
+    // Live run must have fired the hook exactly once.
+    expect(callCount).toBe(1);
+
+    // replay() is a standalone function; it does not accept engine options and
+    // must not fire any metricsHook callback.
+    replay(result.trace);
+    expect(callCount).toBe(1);
   });
 });
 
