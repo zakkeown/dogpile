@@ -49,6 +49,16 @@ v0.5.0 Observability and Auditability starts with provenance annotations: model 
 - **`replay()` and `replayStream()` are tracing-free.** Even when an engine has been configured with a `tracer`, calling `replay()` or `replayStream()` emits no spans; historical timestamps would confuse OTEL backends. See `docs/developer-usage.md` for the recommended user-side bridge pattern.
 - **No runtime dependency added.** `@opentelemetry/api` and `@opentelemetry/sdk-trace-base` are devDependencies used only by `src/tests/otel-tracing-contract.test.ts`.
 
+### Added — Metrics / Counters hook (Phase 10)
+
+- **New subpath: `@dogpile/sdk/runtime/metrics`.** Exports `MetricsHook` and `RunMetricsSnapshot`. Pure-TS, zero runtime dependencies. No root re-exports.
+- **`metricsHook?: MetricsHook` on `EngineOptions` and `DogpileOptions`.** When provided, `onRunComplete` fires at every terminal state (completed, budget-stopped, aborted) with a `RunMetricsSnapshot`; `onSubRunComplete` fires for each coordinator-dispatched child run. When absent, zero overhead — no allocations.
+- **`RunMetricsSnapshot` fields:** `outcome`, `inputTokens`, `outputTokens`, `costUsd`, `totalInputTokens`, `totalOutputTokens`, `totalCostUsd`, `turns`, `durationMs`. Own-only counters exclude nested sub-run tokens; total counters include the full subtree.
+- **`logger?: Logger` on `EngineOptions` and `DogpileOptions`.** Routes hook errors to a caller-supplied structured logger; falls back to `console.error` when absent. Uses the existing `Logger` interface from `@dogpile/sdk/runtime/logger`. Enables future engine-level diagnostic logging without another surface change.
+- **Async fire-and-forget.** Hook callbacks are `(snapshot) => void | Promise<void>`. Async returns attach `.catch(err => logger.error(...))`. Hook latency never delays run completion.
+- **`replay()` and `replayStream()` ignore `metricsHook` entirely.** Consistent with the Phase 9 replay-is-tracing-free invariant.
+- **Frozen fixture.** `src/tests/fixtures/metrics-snapshot-v1.json` records the canonical `RunMetricsSnapshot` v1 field order. Companion `metrics-snapshot-v1.type-check.ts` enforces compile-time type fidelity.
+
 ### Replay
 
 - **`replay()` synthesizes `model-request` / `model-response` events from `trace.providerCalls`.** The augmented event log returned by `replay()` includes provenance events derived from the canonical `providerCalls` anchor. This ensures provenance fields in replayed results are identical to those in live runs (PROV-02). Older traces without these events in `trace.events` gain them on replay.
