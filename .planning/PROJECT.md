@@ -14,7 +14,7 @@ Coordinated, observable, replayable multi-agent runs with a strict boundary: Dog
 
 **Latest shipped milestone:** v0.4.0 Recursive Coordination.
 
-Dogpile now supports agent-driven recursive coordination and the first v0.5 observability slices. A `coordinator` agent can return a `delegate` decision that runs a real child mission, embeds the child trace, rolls up accounting, propagates abort/timeout budget ceilings, streams child events with ancestry, and surfaces child failures back into coordinator decision context. Phase 6 added live model request/response provenance events, replay/replayStream provenance parity, and the `@dogpile/sdk/runtime/provenance` helper. Phase 7 added typed completed-trace event introspection, required `RunResult.health`, deterministic replay health parity, and the `@dogpile/sdk/runtime/introspection` and `@dogpile/sdk/runtime/health` helpers. Phase 8 added the independent `AuditRecord` schema and frozen fixture guard. Phase 9 added the duck-typed OTEL tracing bridge, `@dogpile/sdk/runtime/tracing`, live run/sub-run/child-run span parentage, no-OTEL-import guards, and documentation for caller-side WeakMap bridging.
+Dogpile now supports agent-driven recursive coordination and the full v0.5 observability implementation. A `coordinator` agent can return a `delegate` decision that runs a real child mission, embeds the child trace, rolls up accounting, propagates abort/timeout budget ceilings, streams child events with ancestry, and surfaces child failures back into coordinator decision context. Phase 6 added live model request/response provenance events, replay/replayStream provenance parity, and the `@dogpile/sdk/runtime/provenance` helper. Phase 7 added typed completed-trace event introspection, required `RunResult.health`, deterministic replay health parity, and the `@dogpile/sdk/runtime/introspection` and `@dogpile/sdk/runtime/health` helpers. Phase 8 added the independent `AuditRecord` schema and frozen fixture guard. Phase 9 added the duck-typed OTEL tracing bridge, `@dogpile/sdk/runtime/tracing`, live run/sub-run/child-run span parentage, no-OTEL-import guards, and documentation for caller-side WeakMap bridging. Phase 10 added the `MetricsHook` / `RunMetricsSnapshot` contract, `@dogpile/sdk/runtime/metrics`, root and sub-run metrics lifecycle hooks, package export guards, frozen metrics snapshot fixture, and developer usage docs.
 
 **Validated v0.4.0 features:**
 - `delegate` decision on `coordinator` (no new protocol value)
@@ -36,7 +36,7 @@ Dogpile now supports agent-driven recursive coordination and the first v0.5 obse
 
 **Target features:**
 - OTEL tracing bridge — completed in Phase 9: caller-injected `tracer` (duck-typed against OTEL Tracer interface); SDK emits spans for runs, sub-runs, model calls, and agent turns; no-op when absent; zero runtime deps
-- Metrics / counters — named numeric metrics (tokens, cost, turns, duration) emitted through a caller-supplied hook
+- Metrics / counters — completed in Phase 10: named numeric metrics (tokens, cost, turns, duration) emitted through a caller-supplied hook
 - Structured event introspection — typed query/filter API over completed trace events (by type, agent, turn, cost)
 - Health / diagnostics API — per-run health summary at result time: warnings, anomalies (runaway turns, budget near-miss, provider errors)
 - Audit event schema — completed in Phase 8: stable, versioned, human-readable audit record format for compliance
@@ -76,10 +76,11 @@ Dogpile now supports agent-driven recursive coordination and the first v0.5 obse
 - ✓ **Health diagnostics** — every `RunResult` includes required `health: RunHealthSummary`; `computeHealth()` is available through `@dogpile/sdk/runtime/health`, replay recomputes health deterministically, and anomaly shape is guarded by a frozen fixture. — Phase 7, v0.5.0
 - ✓ **Audit event schema** — `@dogpile/sdk/runtime/audit` exports `AuditRecord` and `createAuditRecord()`; schema version `"1"` is independent of `RunEvent` variants and guarded by a frozen fixture. — Phase 8, v0.5.0
 - ✓ **OTEL tracing bridge** — `DogpileOptions` and `EngineOptions` accept a duck-typed `tracer`; `@dogpile/sdk/runtime/tracing` exports the span contract; engine tracing emits run, sub-run, child-run, model-call, and agent-turn spans with no runtime OTEL dependency. — Phase 9, v0.5.0
+- ✓ **Metrics / counters** — `DogpileOptions` and `EngineOptions` accept an optional `metricsHook` and `logger`; `@dogpile/sdk/runtime/metrics` exports `MetricsHook` and `RunMetricsSnapshot`; engine metrics emit root and sub-run completion counters while preserving metrics-free replay and no-hook behavior. — Phase 10, v0.5.0
 
 ### Active
 
-Remaining active requirements for v0.5.0 are the Metrics / Counters slice. See REQUIREMENTS.md for full REQ-ID list.
+None for v0.5.0. Implementation is complete and verified; the milestone is pending closeout and release prep.
 
 ### Out of Scope
 
@@ -152,4 +153,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-02 — Phase 9 OTEL Tracing Bridge complete and verified.*
+*Last updated: 2026-05-02 — Phase 10 Metrics / Counters complete and verified.*
