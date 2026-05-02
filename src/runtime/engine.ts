@@ -141,6 +141,8 @@ export function createEngine(options: EngineOptions): Engine {
         ...(options.wrapUpHint ? { wrapUpHint: options.wrapUpHint } : {}),
         ...(options.evaluate ? { evaluate: options.evaluate } : {}),
         ...(options.tracer ? { tracer: options.tracer } : {}),
+        ...(options.metricsHook ? { metricsHook: options.metricsHook } : {}),
+        ...(options.logger ? { logger: options.logger } : {}),
         currentDepth: 0,
         effectiveMaxDepth,
         effectiveMaxConcurrentChildren,
@@ -270,6 +272,8 @@ export function createEngine(options: EngineOptions): Engine {
               ? { defaultSubRunTimeoutMs: options.defaultSubRunTimeoutMs }
               : {}),
             ...(options.tracer ? { tracer: options.tracer } : {}),
+            ...(options.metricsHook ? { metricsHook: options.metricsHook } : {}),
+            ...(options.logger ? { logger: options.logger } : {}),
             streamEvents: true,
             emit(event: RunEvent): void {
               if (status !== "running") {
@@ -1243,11 +1247,18 @@ async function runProtocol(options: RunProtocolOptions): Promise<RunResult> {
     protocolKind: options.protocol.kind,
     tier: options.tier
   });
+  const metrics = openRunMetrics({
+    ...(options.metricsHook ? { metricsHook: options.metricsHook } : {}),
+    ...(options.logger ? { logger: options.logger } : {})
+  });
   const emitForProtocol =
-    tracing || options.emit
+    tracing || metrics || options.emit
       ? (event: RunEvent): void => {
         if (tracing) {
           handleTracingEvent(tracing, event);
+        }
+        if (metrics) {
+          handleMetricsEvent(metrics, event);
         }
         options.emit?.(event);
       }
@@ -1264,10 +1275,16 @@ async function runProtocol(options: RunProtocolOptions): Promise<RunResult> {
     if (tracing) {
       closeRunTracing(tracing, result);
     }
+    if (metrics && (options.currentDepth === 0 || options.currentDepth === undefined)) {
+      closeRunMetrics(metrics, result);
+    }
     return result;
   } catch (error) {
     if (tracing) {
       closeRunTracing(tracing, undefined, error);
+    }
+    if (metrics && (options.currentDepth === 0 || options.currentDepth === undefined)) {
+      closeRunMetrics(metrics, undefined);
     }
     throw error;
   }
@@ -1345,7 +1362,8 @@ function runProtocolInner(
             ...childProtocolInput,
             protocol: normalizeProtocol(childProtocolInput.protocol),
             ...(options.tracer ? { tracer: options.tracer } : {}),
-            ...(childParent ? { parentSpan: childParent } : {})
+            ...(childParent ? { parentSpan: childParent } : {}),
+            ...(options.logger ? { logger: options.logger } : {})
           });
         }
       });
@@ -1417,12 +1435,13 @@ export function stream(options: DogpileOptions): StreamHandle {
  * {@link Trace} returned by a previous `run()`, `stream()`, or
  * `Dogpile.pile()` call.
  *
- * Tracing: replay is intentionally tracing-free. Even when an engine instance
- * has been configured with a `tracer` on its `EngineOptions`, calling this
- * function emits no spans — replaying historical events with current
- * timestamps would confuse OTEL backends. See `docs/developer-usage.md`.
+ * Tracing and metrics: replay is intentionally tracing-free and metrics-free.
+ * Even when an engine instance has been configured with a `tracer` or
+ * `metricsHook` on its `EngineOptions`, calling this function emits no spans
+ * or callbacks — replaying historical events with current timestamps would
+ * confuse observability backends. See `docs/developer-usage.md`.
  */
-// Tracing-free: replay never uses an EngineOptions tracer.
+// Tracing/metrics-free: replay never uses EngineOptions tracer or metricsHook.
 export function replay(trace: Trace): RunResult {
   const cost = trace.finalOutput.cost;
   const lastEvent = trace.events.at(-1);
@@ -1631,12 +1650,13 @@ function dogpileErrorFromSerializedPayload(input: {
  * events. Since all data comes from the trace, replay remains storage-free and
  * provider-free.
  *
- * Tracing: replayStream is intentionally tracing-free. Even when an engine
- * instance has been configured with a `tracer` on its `EngineOptions`, calling
- * this function emits no spans — replaying historical events with current
- * timestamps would confuse OTEL backends. See `docs/developer-usage.md`.
+ * Tracing and metrics: replayStream is intentionally tracing-free and
+ * metrics-free. Even when an engine instance has been configured with a
+ * `tracer` or `metricsHook` on its `EngineOptions`, calling this function
+ * emits no spans or callbacks — replaying historical events with current
+ * timestamps would confuse observability backends. See `docs/developer-usage.md`.
  */
-// Tracing-free: replayStream never uses an EngineOptions tracer.
+// Tracing/metrics-free: replayStream never uses EngineOptions tracer or metricsHook.
 export function replayStream(trace: Trace): StreamHandle {
   const result = Promise.resolve(replay(trace));
   const replayEvents = replayStreamEvents(trace);
