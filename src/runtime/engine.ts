@@ -3,6 +3,7 @@ import type {
   AbortedEvent,
   BudgetStopEvent,
   BudgetTier,
+  CostSummary,
   DogpileErrorCode,
   DogpileOptions,
   Engine,
@@ -28,6 +29,7 @@ import type {
 import { runBroadcast } from "./broadcast.js";
 import { runCoordinator, type AbortDrainFn } from "./coordinator.js";
 import {
+  addCost,
   createReplayTraceFinalOutput,
   createReplayTraceBudgetStateChanges,
   canonicalizeRunResult,
@@ -37,6 +39,7 @@ import {
   createRunMetadata,
   createRunUsage,
   defaultAgents,
+  emptyCost,
   normalizeProtocol,
   orderAgentsForTemperature,
   recomputeAccountingFromTrace,
@@ -716,7 +719,17 @@ interface TracingState {
   readonly modelCallSpans: Map<string, DogpileSpan>;
   readonly pendingModelRequests: Map<string, ModelRequestEvent>;
   readonly agentTurnCounters: Map<string, number>;
-  readonly tokenAccumByAgent: Map<string, { inputTokens: number; outputTokens: number }>;
+  readonly turnAccumByAgent: Map<string, TurnAccum>;
+  readonly agentIds: Set<string>;
+  runId?: string;
+  turnCount: number;
+  lastCost: CostSummary;
+}
+
+interface TurnAccum {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
 }
 
 function openRunTracing(options: {
@@ -747,7 +760,10 @@ function openRunTracing(options: {
     modelCallSpans: new Map(),
     pendingModelRequests: new Map(),
     agentTurnCounters: new Map(),
-    tokenAccumByAgent: new Map()
+    turnAccumByAgent: new Map(),
+    agentIds: new Set(),
+    turnCount: 0,
+    lastCost: emptyCost()
   };
 }
 
@@ -757,9 +773,15 @@ function handleTracingEvent(state: TracingState, event: RunEvent): void {
     return;
   }
 
+  if (state.runId === undefined) {
+    state.runId = event.runId;
+    state.runSpan.setAttribute("dogpile.run.id", event.runId);
+  }
+
   switch (event.type) {
     case "model-request": {
       state.pendingModelRequests.set(event.callId, event);
+      state.agentIds.add(event.agentId);
 
       if (!state.agentTurnSpans.has(event.agentId)) {
         const turnNumber = (state.agentTurnCounters.get(event.agentId) ?? 0) + 1;
@@ -797,6 +819,12 @@ function handleTracingEvent(state: TracingState, event: RunEvent): void {
       if (span) {
         const inputTokens = event.response.usage?.inputTokens ?? 0;
         const outputTokens = event.response.usage?.outputTokens ?? 0;
+        const responseCost: CostSummary = {
+          usd: event.response.costUsd ?? 0,
+          inputTokens,
+          outputTokens,
+          totalTokens: event.response.usage?.totalTokens ?? inputTokens + outputTokens
+        };
         span.setAttribute("dogpile.model.input_tokens", inputTokens);
         span.setAttribute("dogpile.model.output_tokens", outputTokens);
         if (event.response.costUsd !== undefined) {
@@ -805,27 +833,42 @@ function handleTracingEvent(state: TracingState, event: RunEvent): void {
         span.setStatus("ok");
         span.end();
         state.modelCallSpans.delete(event.callId);
-        const accum = state.tokenAccumByAgent.get(event.agentId) ?? { inputTokens: 0, outputTokens: 0 };
+        const accum = state.turnAccumByAgent.get(event.agentId) ?? {
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0
+        };
         accum.inputTokens += inputTokens;
         accum.outputTokens += outputTokens;
-        state.tokenAccumByAgent.set(event.agentId, accum);
+        accum.costUsd += responseCost.usd;
+        state.turnAccumByAgent.set(event.agentId, accum);
+        state.lastCost = addCost(state.lastCost, responseCost);
       }
       state.pendingModelRequests.delete(event.callId);
       break;
     }
     case "agent-turn": {
+      state.agentIds.add(event.agentId);
+      state.turnCount += 1;
+      state.lastCost = event.cost;
       const turnSpan = state.agentTurnSpans.get(event.agentId);
       if (turnSpan) {
         turnSpan.setAttribute("dogpile.agent.role", event.role);
-        turnSpan.setAttribute("dogpile.turn.cost_usd", event.cost.usd);
-        const accum = state.tokenAccumByAgent.get(event.agentId);
-        turnSpan.setAttribute("dogpile.turn.input_tokens", accum?.inputTokens ?? event.cost.inputTokens);
-        turnSpan.setAttribute("dogpile.turn.output_tokens", accum?.outputTokens ?? event.cost.outputTokens);
+        const accum = state.turnAccumByAgent.get(event.agentId);
+        turnSpan.setAttribute("dogpile.turn.cost_usd", accum?.costUsd ?? 0);
+        turnSpan.setAttribute("dogpile.turn.input_tokens", accum?.inputTokens ?? 0);
+        turnSpan.setAttribute("dogpile.turn.output_tokens", accum?.outputTokens ?? 0);
         turnSpan.setStatus("ok");
         turnSpan.end();
         state.agentTurnSpans.delete(event.agentId);
       }
-      state.tokenAccumByAgent.delete(event.agentId);
+      state.turnAccumByAgent.delete(event.agentId);
+      break;
+    }
+    case "broadcast":
+    case "budget-stop":
+    case "final": {
+      state.lastCost = event.cost;
       break;
     }
     case "sub-run-started": {
@@ -865,6 +908,14 @@ function handleTracingEvent(state: TracingState, event: RunEvent): void {
 
 function closeRunTracing(state: TracingState, result: RunResult | undefined, error?: unknown): void {
   if (error !== undefined) {
+    if (state.runId !== undefined) {
+      state.runSpan.setAttribute("dogpile.run.id", state.runId);
+    }
+    state.runSpan.setAttribute("dogpile.run.agent_count", state.agentIds.size);
+    state.runSpan.setAttribute("dogpile.run.turn_count", state.turnCount);
+    state.runSpan.setAttribute("dogpile.run.cost_usd", state.lastCost.usd);
+    state.runSpan.setAttribute("dogpile.run.input_tokens", state.lastCost.inputTokens);
+    state.runSpan.setAttribute("dogpile.run.output_tokens", state.lastCost.outputTokens);
     state.runSpan.setAttribute("dogpile.run.outcome", "aborted");
     state.runSpan.setStatus("error", error instanceof Error ? error.message : String(error));
     closeOpenTracingSpans(state);

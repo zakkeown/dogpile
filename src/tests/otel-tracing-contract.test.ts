@@ -17,6 +17,7 @@ import {
   createDelegatingDeterministicProvider,
   createDeterministicModelProvider
 } from "../testing/deterministic-provider.js";
+import type { ConfiguredModelProvider, ModelResponse } from "../types.js";
 
 function makeTracerWithExporter(): {
   readonly tracer: DogpileTracer;
@@ -104,6 +105,33 @@ describe("OTEL tracing bridge contract", () => {
     expect(runSpan?.attributes["dogpile.run.cost_usd"]).toBeTypeOf("number");
   });
 
+  it("records per-turn agent-turn cost instead of cumulative run cost", async () => {
+    const { tracer, exporter, provider } = makeTracerWithExporter();
+
+    await run({
+      intent: "two turn accounting",
+      model: createDeterministicModelProvider("per-turn-cost-test"),
+      protocol: { kind: "sequential", maxTurns: 2 },
+      tracer
+    });
+    await provider.forceFlush();
+
+    const turnSpans = exporter
+      .getFinishedSpans()
+      .filter((span) => span.name === DOGPILE_SPAN_NAMES.AGENT_TURN)
+      .sort(
+        (left, right) =>
+          Number(left.attributes["dogpile.turn.number"]) -
+          Number(right.attributes["dogpile.turn.number"])
+      );
+
+    expect(turnSpans).toHaveLength(2);
+    expect(turnSpans.map((span) => span.attributes["dogpile.turn.cost_usd"])).toEqual([
+      0.0001,
+      0.0001
+    ]);
+  });
+
   it("truncates long dogpile.run intent attributes", async () => {
     const { tracer, exporter, provider } = makeTracerWithExporter();
 
@@ -117,6 +145,36 @@ describe("OTEL tracing bridge contract", () => {
 
     const runSpan = exporter.getFinishedSpans().find((span) => span.name === DOGPILE_SPAN_NAMES.RUN);
     expect(String(runSpan?.attributes["dogpile.run.intent"])).toHaveLength(200);
+  });
+
+  it("keeps best-effort run attributes on failed run spans", async () => {
+    const { tracer, exporter, provider } = makeTracerWithExporter();
+    const failingProvider: ConfiguredModelProvider = {
+      id: "failing-trace-provider",
+      async generate(): Promise<ModelResponse> {
+        throw new Error("trace provider failure");
+      }
+    };
+
+    await expect(
+      run({
+        intent: "failed trace attributes",
+        model: failingProvider,
+        protocol: { kind: "sequential", maxTurns: 1 },
+        tracer
+      })
+    ).rejects.toThrow("trace provider failure");
+    await provider.forceFlush();
+
+    const runSpan = exporter.getFinishedSpans().find((span) => span.name === DOGPILE_SPAN_NAMES.RUN);
+    expect(runSpan).toBeDefined();
+    expect(runSpan?.attributes["dogpile.run.id"]).toBeTypeOf("string");
+    expect(runSpan?.attributes["dogpile.run.outcome"]).toBe("aborted");
+    expect(runSpan?.attributes["dogpile.run.turn_count"]).toBe(0);
+    expect(runSpan?.attributes["dogpile.run.cost_usd"]).toBe(0);
+    expect(runSpan?.attributes["dogpile.run.input_tokens"]).toBe(0);
+    expect(runSpan?.attributes["dogpile.run.output_tokens"]).toBe(0);
+    expect(runSpan?.status.code).toBe(SpanStatusCode.ERROR);
   });
 
   it("nests live coordinator sub-run and child run spans under the parent run", async () => {
