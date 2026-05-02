@@ -133,7 +133,7 @@ Plans:
 **Plans:** 4 plans
 Plans:
 **Wave 1**
-- [ ] 10-01-PLAN.md — MetricsHook/RunMetricsSnapshot types + metrics.ts module + metricsHook?/logger? on EngineOptions/DogpileOptions
+- [x] 10-01-PLAN.md — MetricsHook/RunMetricsSnapshot types + metrics.ts module + metricsHook?/logger? on EngineOptions/DogpileOptions
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 10-02-PLAN.md — Engine integration: MetricsState + openRunMetrics + handleMetricsEvent + closeRunMetrics + fireHook + createEngine threading
@@ -152,7 +152,7 @@ Plans:
 | 7. Structured Event Introspection + Health Diagnostics | 5/5 | Complete | 2026-05-01 |
 | 8. Audit Event Schema | 3/3 | Complete | 2026-05-01 |
 | 9. OTEL Tracing Bridge | 5/5 | Complete | 2026-05-02 |
-| 10. Metrics / Counters | 0/4 | Not started | — |
+| 10. Metrics / Counters | 1/4 | In Progress | — |
 
 ---
 
@@ -169,4 +169,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-05-01 — Phase 10 Metrics/Counters planning complete; 4 plans in 4 waves ready for execution.*
+*Last updated: 2026-05-02 — Phase 10 Plan 01 metrics contract surface completed.*
