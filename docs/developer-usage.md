@@ -599,6 +599,90 @@ tracing-free behavior is deliberate. Attach
 the tracer to the original live run; the captured `RunResult.trace` already
 contains everything needed for offline analysis without span emission.
 
+## Metrics
+
+Supply a `metricsHook` on `EngineOptions` or `Dogpile.pile()` options to
+receive named counters at run and sub-run completion:
+
+```ts
+import { run } from "@dogpile/sdk";
+import type { MetricsHook } from "@dogpile/sdk/runtime/metrics";
+
+const metricsHook: MetricsHook = {
+  onRunComplete(snapshot) {
+    console.log("run complete", {
+      outcome: snapshot.outcome,         // "completed" | "budget-stopped" | "aborted"
+      inputTokens: snapshot.inputTokens, // own, excluding nested sub-runs
+      outputTokens: snapshot.outputTokens,
+      costUsd: snapshot.costUsd,
+      totalCostUsd: snapshot.totalCostUsd, // full subtree including sub-runs
+      turns: snapshot.turns,
+      durationMs: snapshot.durationMs
+    });
+  },
+  onSubRunComplete(snapshot) {
+    // Fires once per coordinator-dispatched child run.
+    console.log("sub-run complete", snapshot.outcome, snapshot.durationMs + "ms");
+  }
+};
+
+const result = await run({
+  intent: "...",
+  model: myProvider,
+  protocol: { kind: "sequential", maxTurns: 3 },
+  metricsHook
+});
+```
+
+### Behavior
+
+- **Zero overhead when absent.** No allocations occur if `metricsHook` is not
+  supplied.
+- **All terminal states.** `onRunComplete` fires for completed, budget-stopped,
+  and aborted runs. The `outcome` field distinguishes them.
+- **Sub-run granularity.** `onSubRunComplete` fires once per
+  coordinator-dispatched child run when it completes. It does not fire for
+  failed sub-runs.
+- **Own vs. total counters.** `inputTokens`, `outputTokens`, and `costUsd` are
+  own-only: direct tokens and cost for this run, excluding nested sub-runs.
+  `totalInputTokens`, `totalOutputTokens`, and `totalCostUsd` include the full
+  subtree, already rolled up from Phase 2.
+- **Async fire-and-forget.** Callbacks may return a `Promise`. The SDK attaches
+  `.catch` but does not await it, so hook latency never delays run completion.
+  Callers needing guaranteed delivery, such as a database flush, should handle
+  that inside their hook.
+- **Hook errors are isolated.** Throwing or rejecting hooks route the error to
+  `logger.error("dogpile:metricsHook threw", ...)` and never propagate into the
+  run result.
+- **Replay ignores metricsHook.** `replay()` and `replayStream()` do not fire
+  the metrics hook because historical counters from a replay would be
+  misleading.
+
+### Logger
+
+Supply a `logger` to route hook errors to your logging infrastructure instead
+of `console.error`:
+
+```ts
+import type { Logger } from "@dogpile/sdk/runtime/logger";
+
+const logger: Logger = {
+  debug: myLogger.debug.bind(myLogger),
+  info: myLogger.info.bind(myLogger),
+  warn: myLogger.warn.bind(myLogger),
+  error: myLogger.error.bind(myLogger)
+};
+
+const result = await run({
+  intent: "...",
+  model: myProvider,
+  logger
+});
+```
+
+The `logger` field also accepts future SDK-internal diagnostic messages in
+later releases without requiring another public-surface change.
+
 ## Error Handling
 
 Public failures use `DogpileError` with stable string codes.
