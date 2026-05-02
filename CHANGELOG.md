@@ -34,6 +34,21 @@ v0.5.0 Observability and Auditability starts with provenance annotations: model 
 
 **Note:** Audit records are not auto-attached to `RunResult`. Callers explicitly invoke `createAuditRecord(result.trace)`.
 
+### Added — OTEL tracing bridge (Phase 9)
+
+- **New subpath: `@dogpile/sdk/runtime/tracing`.** Exports `DogpileTracer`, `DogpileSpan`, `DogpileSpanOptions`, and `DOGPILE_SPAN_NAMES`. Pure-TS, zero runtime dependencies; `@opentelemetry/*` is not imported anywhere in `src/runtime/`, `src/browser/`, or `src/providers/`. The `src/tests/no-otel-imports.test.ts` grep test enforces this boundary.
+- **`tracer?: DogpileTracer` on `EngineOptions` and `DogpileOptions`.** When a duck-typed tracer is provided, the SDK emits spans on every run; when absent the run completes with zero span overhead.
+- **Four span names emitted under the `dogpile.*` namespace:** `dogpile.run`, `dogpile.sub-run`, `dogpile.agent-turn`, `dogpile.model-call`. Hierarchy: `dogpile.run` → `dogpile.sub-run` → `dogpile.agent-turn` → `dogpile.model-call`.
+- **`dogpile.run` span attributes:** `dogpile.run.id`, `dogpile.run.protocol`, `dogpile.run.tier`, `dogpile.run.intent` (truncated to 200 chars), `dogpile.run.outcome` (`completed` / `budget-stopped` / `aborted`), `dogpile.run.cost_usd`, `dogpile.run.turn_count`, `dogpile.run.input_tokens`, `dogpile.run.output_tokens`, and `dogpile.run.termination_reason` for budget-stopped runs.
+- **`dogpile.agent-turn` span attributes:** `dogpile.agent.id`, `dogpile.turn.number`, `dogpile.agent.role`, `dogpile.model.id`, `dogpile.turn.cost_usd`, `dogpile.turn.input_tokens`, `dogpile.turn.output_tokens`. `dogpile.turn.number` is derived from a per-agentId counter inside the engine because `TurnEvent` itself has no `turnNumber` field.
+- **`dogpile.model-call` span attributes:** `dogpile.model.id`, `dogpile.call.id`, `dogpile.provider.id`, `dogpile.model.input_tokens`, `dogpile.model.output_tokens`, and `dogpile.model.cost_usd` when the provider reports it.
+- **Sub-run spans are correctly nested.** Children dispatched by the coordinator protocol appear as descendants of the parent run span via internal `parentSpan` threading on `RunProtocolOptions`; they do not appear as disconnected root traces in OTEL backends.
+- **Span status semantics.** `dogpile.run` spans get `setStatus("ok")` for completed runs, including budget-stopped runs with the termination reason captured as an attribute, and `setStatus("error", message)` for aborted or thrown runs. `dogpile.sub-run` spans on `sub-run-failed` events get `setStatus("error", event.error.message)`.
+- **Streaming parity.** `stream()` produces the same four span types with the same nesting and attributes as `run()`.
+- **Root re-exports.** `DogpileTracer`, `DogpileSpan`, `DogpileSpanOptions` are re-exported as types from `@dogpile/sdk`; `DOGPILE_SPAN_NAMES` is a value-level root re-export.
+- **`replay()` and `replayStream()` are tracing-free.** Even when an engine has been configured with a `tracer`, calling `replay()` or `replayStream()` emits no spans; historical timestamps would confuse OTEL backends. See `docs/developer-usage.md` for the recommended user-side bridge pattern.
+- **No runtime dependency added.** `@opentelemetry/api` and `@opentelemetry/sdk-trace-base` are devDependencies used only by `src/tests/otel-tracing-contract.test.ts`.
+
 ### Replay
 
 - **`replay()` synthesizes `model-request` / `model-response` events from `trace.providerCalls`.** The augmented event log returned by `replay()` includes provenance events derived from the canonical `providerCalls` anchor. This ensures provenance fields in replayed results are identical to those in live runs (PROV-02). Older traces without these events in `trace.events` gain them on replay.
