@@ -36,8 +36,8 @@
 
 ### Metrics / Counters
 
-- [ ] **METR-01**: Caller can supply a metrics hook on `EngineOptions` and receive named counters (token usage, cost, turn count, duration) at run completion and sub-run completion
-- [ ] **METR-02**: Metrics hook is optional; runs complete with no overhead when no hook is provided
+- [x] **METR-01**: Caller can supply a metrics hook on `EngineOptions` and receive named counters (token usage, cost, turn count, duration) at run completion and sub-run completion
+- [x] **METR-02**: Metrics hook is optional; runs complete with no overhead when no hook is provided
 
 ---
 

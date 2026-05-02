@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-02T01:01:52Z"
-last_activity: 2026-05-02 -- Phase 10 Plan 01 metrics contract surface completed
+last_updated: "2026-05-02T01:11:09Z"
+last_activity: 2026-05-02 -- Phase 10 Plan 02 metrics engine integration completed
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 23
-  completed_plans: 20
-  percent: 87
+  completed_plans: 21
+  percent: 91
 ---
 
 # State
@@ -24,12 +24,12 @@ progress:
 ## Current Position
 
 Phase: 10
-Plan: Wave 2 / 10-02
+Plan: Wave 3 / 10-03
 Status: Executing Phase 10 plans
-Last activity: 2026-05-02 -- Phase 10 Plan 01 metrics contract surface completed
+Last activity: 2026-05-02 -- Phase 10 Plan 02 metrics engine integration completed
 
 ```
-Progress [█████████░] 87% (20/23 milestone plans)
+Progress [█████████░] 91% (21/23 milestone plans)
 ```
 
 ## Performance Metrics
@@ -37,8 +37,8 @@ Progress [█████████░] 87% (20/23 milestone plans)
 | Metric | Value |
 |--------|-------|
 | Phases complete | 4 / 5 |
-| Requirements complete | 11 / 13 |
-| Plans complete | 20 / 23 |
+| Requirements complete | 13 / 13 |
+| Plans complete | 21 / 23 |
 | Phase 08 P01 | 5 min | 2 tasks | 2 files |
 | Phase 08 P02 | 4 min | 2 tasks | 3 files |
 | Phase 08 P03 | 4 min | 2 tasks | 4 files |
@@ -48,6 +48,7 @@ Progress [█████████░] 87% (20/23 milestone plans)
 | Phase 09 P03 | 8 min | 3 tasks | 4 files |
 | Phase 09 P04 | 6 min | 2 tasks | 3 files |
 | Phase 10 P01 | 4 min | 2 tasks | 3 files |
+| Phase 10 P02 | 6 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,9 @@ Progress [█████████░] 87% (20/23 milestone plans)
 - **Phase 9 tracing public surface is locked.** `@dogpile/sdk/runtime/tracing` is package-exported, package-exports tests assert the subpath and type surface, no-otel-imports guards runtime/browser/provider roots, and the live OTEL contract test verifies run/sub-run/child-run parentage through `createDelegatingDeterministicProvider`.
 - **Phase 9 docs lockstep is complete.** CHANGELOG.md, CLAUDE.md, and docs/developer-usage.md document the OTEL tracing bridge, WeakMap bridge pattern, span hierarchy, attribute surface, zero-overhead absent tracer behavior, and tracing-free replay contract. `pnpm run verify` passed.
 - **Phase 9 code review findings were fixed before verification.** `dogpile.agent-turn` spans now use per-turn model-call accounting, and failed `dogpile.run` spans retain best-effort run id/count/cost attributes. Regression coverage lives in `src/tests/otel-tracing-contract.test.ts`.
+- **Phase 10 metrics engine uses root-only run completion.** `onRunComplete` fires only for `currentDepth === 0` or undefined; coordinator child runs are reported through `onSubRunComplete` from the parent emit closure to avoid double-counting.
+- **Phase 10 metrics hooks are fire-and-forget.** Synchronous hook throws and async rejections are routed to `logger.error("dogpile:metricsHook threw", { error })` or `console.error` fallback and never change the run result.
+- **Phase 10 replay remains metrics-free.** `replay()` and `replayStream()` do not emit metrics callbacks, matching the existing tracing-free replay contract.
 
 ### Todos
 
@@ -90,8 +94,8 @@ Progress [█████████░] 87% (20/23 milestone plans)
 
 ## Session Continuity
 
-**Next action:** Execute Phase 10 Plan 02 — Engine integration for metrics lifecycle.
+**Next action:** Execute Phase 10 Plan 03 — Public-surface lockstep for metrics.
 
 ---
 
-*Last updated: 2026-05-02 — Phase 10 Plan 01 completed.*
+*Last updated: 2026-05-02 — Phase 10 Plan 02 completed.*
