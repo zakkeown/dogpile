@@ -4,6 +4,8 @@
 
 v0.5.0 Observability and Auditability starts with provenance annotations: model provider calls now produce real request/response events, replay can synthesize those events from provider-call anchors, and callers get a small runtime helper for normalized provenance fields.
 
+Prepared the release identity for `@dogpile/sdk@0.5.0` and `dogpile-sdk-0.5.0.tgz`.
+
 ### Breaking
 
 - **`ModelRequestEvent` shape changed.** The `at` field is removed. The event now carries `startedAt: string` (ISO-8601 timestamp immediately before the provider call) and `modelId: string` (resolved model identifier). Update any code that reads `event.at` on a `ModelRequestEvent`.
