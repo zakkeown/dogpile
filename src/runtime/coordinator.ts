@@ -65,6 +65,11 @@ import { createWrapUpHintController } from "./wrap-up.js";
  * in by `engine.ts` so coordinator avoids a circular import.
  */
 export type RunProtocolFn = (input: {
+  /**
+   * Planned child run id emitted on sub-run lifecycle events before dispatch.
+   * The engine callback uses this to look up the matching sub-run span.
+   */
+  readonly runId: string;
   readonly intent: string;
   readonly protocol: ProtocolSelection;
   readonly tier: Tier;
@@ -1407,6 +1412,7 @@ async function dispatchDelegate(input: DispatchDelegateOptions): Promise<Dispatc
       : undefined;
 
   const childOptions = {
+    runId: childRunId,
     intent: decision.intent,
     protocol: decision.protocol,
     tier: options.tier,

@@ -58,6 +58,7 @@ import {
   validateProviderLocality,
   validateRunCallOptions
 } from "./validation.js";
+import type { DogpileSpan } from "./tracing.js";
 
 const DEFAULT_MAX_DEPTH = 4;
 const DEFAULT_MAX_CONCURRENT_CHILDREN = 4;
@@ -684,6 +685,20 @@ interface RunProtocolOptions {
   readonly defaultSubRunTimeoutMs?: number;
   readonly registerAbortDrain?: (drain: AbortDrainFn) => void;
   readonly failureInstancesByChildRunId?: Map<string, DogpileError>;
+  /**
+   * Optional parent span for the next runProtocol invocation. Threaded by the
+   * coordinator when dispatching child runs so that the child's `dogpile.run`
+   * span is correctly nested under its parent's `dogpile.sub-run` span.
+   * Internal-only; not part of the public surface.
+   */
+  readonly parentSpan?: DogpileSpan;
+  /**
+   * Per-child sub-run span lookup, keyed by childRunId. Populated by the
+   * parent's emit closure on `sub-run-started`. The coordinator dispatcher
+   * reads this to thread the correct per-child span as parent for the
+   * recursive runProtocol call. Internal-only.
+   */
+  readonly subRunSpansByChildId?: ReadonlyMap<string, DogpileSpan>;
 }
 
 type NonStreamingProtocolOptions = Omit<RunProtocolOptions, "emit"> & Pick<EngineOptions, "evaluate">;
@@ -846,11 +861,15 @@ function runProtocol(options: RunProtocolOptions): Promise<RunResult> {
         ...(options.failureInstancesByChildRunId !== undefined
           ? { failureInstancesByChildRunId: options.failureInstancesByChildRunId }
           : {}),
-        runProtocol: (childInput) =>
-          runProtocol({
-            ...childInput,
-            protocol: normalizeProtocol(childInput.protocol)
-          })
+        runProtocol: (childInput) => {
+          const { runId: childRunId, ...childProtocolInput } = childInput;
+          const childParent = options.subRunSpansByChildId?.get(childRunId) ?? options.parentSpan;
+          return runProtocol({
+            ...childProtocolInput,
+            protocol: normalizeProtocol(childProtocolInput.protocol),
+            ...(childParent ? { parentSpan: childParent } : {})
+          });
+        }
       });
     case "shared":
       return runShared({
