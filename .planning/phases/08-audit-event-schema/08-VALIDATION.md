@@ -1,10 +1,11 @@
 ---
 phase: 8
 slug: audit-event-schema
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-05-01
+audited: 2026-05-01
 ---
 
 # Phase 8 — Validation Strategy
@@ -38,12 +39,12 @@ created: 2026-05-01
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 8-01-T1 | 01 | 1 | AUDT-01, AUDT-02 | — | N/A | unit | `pnpm vitest run src/runtime/audit.test.ts` | ❌ W0 | ⬜ pending |
-| 8-01-T2 | 01 | 1 | AUDT-02 | — | N/A | compile | `pnpm run typecheck` | ❌ W0 | ⬜ pending |
-| 8-02-T1 | 02 | 2 | AUDT-02 | — | N/A | compile | `pnpm run typecheck` | ❌ W0 | ⬜ pending |
-| 8-02-T2 | 02 | 2 | AUDT-02 | — | N/A | contract | `pnpm vitest run src/tests/audit-record-shape.test.ts` | ❌ W0 | ⬜ pending |
-| 8-03-T1 | 03 | 3 | AUDT-01, AUDT-02 | — | N/A | package | `pnpm vitest run src/tests/package-exports.test.ts` | ✅ | ⬜ pending |
-| 8-03-T2 | 03 | 3 | AUDT-01, AUDT-02 | — | N/A | compile | `pnpm run typecheck` | ✅ | ⬜ pending |
+| 8-01-T1 | 01 | 1 | AUDT-01, AUDT-02 | — | N/A | unit | `pnpm vitest run src/runtime/audit.test.ts` | ✅ | ✅ green |
+| 8-01-T2 | 01 | 1 | AUDT-02 | — | N/A | compile | `pnpm run typecheck` | ✅ | ✅ green |
+| 8-02-T1 | 02 | 2 | AUDT-02 | — | N/A | compile | `pnpm run typecheck` | ✅ | ✅ green |
+| 8-02-T2 | 02 | 2 | AUDT-02 | — | N/A | contract | `pnpm vitest run src/tests/audit-record-shape.test.ts` | ✅ | ✅ green |
+| 8-03-T1 | 03 | 3 | AUDT-01, AUDT-02 | — | N/A | package | `pnpm vitest run src/tests/package-exports.test.ts` | ✅ | ✅ green |
+| 8-03-T2 | 03 | 3 | AUDT-01, AUDT-02 | — | N/A | compile | `pnpm run typecheck` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -51,11 +52,11 @@ created: 2026-05-01
 
 ## Wave 0 Requirements
 
-- [ ] `src/runtime/audit.ts` — implementation (createAuditRecord + exported types)
-- [ ] `src/runtime/audit.test.ts` — unit test stubs for createAuditRecord
-- [ ] `src/tests/audit-record-shape.test.ts` — frozen fixture deepEqual test
-- [ ] `src/tests/fixtures/audit-record-v1.json` — frozen fixture file
-- [ ] `src/tests/fixtures/audit-record-v1.type-check.ts` — `satisfies AuditRecord` compile-time check
+- [x] `src/runtime/audit.ts` — implementation (createAuditRecord + exported types)
+- [x] `src/runtime/audit.test.ts` — unit test stubs for createAuditRecord
+- [x] `src/tests/audit-record-shape.test.ts` — frozen fixture deepEqual test
+- [x] `src/tests/fixtures/audit-record-v1.json` — frozen fixture file
+- [x] `src/tests/fixtures/audit-record-v1.type-check.ts` — `satisfies AuditRecord` compile-time check
 
 *Existing vitest infrastructure covers the test runner requirement.*
 
@@ -73,11 +74,23 @@ created: 2026-05-01
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** 2026-05-01
+
+---
+
+## Validation Audit 2026-05-01
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All 6 tasks covered by automated tests. 54 tests green across 3 test files. Typecheck clean.
