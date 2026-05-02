@@ -348,6 +348,26 @@ describe("MetricsHook engine lifecycle", () => {
           JSON.stringify(call.fields) === JSON.stringify({ error: "async hook failed" })
       )
     );
+
+    await run({
+      intent: "Swallow Promise-like hook errors.",
+      model: createDeterministicModelProvider("metrics-promise-like-hook-model"),
+      protocol: { kind: "sequential", maxTurns: 1 },
+      tier: "fast",
+      logger,
+      metricsHook: {
+        onRunComplete(): Promise<void> {
+          return promiseLikeRejection(new Error("promise-like hook failed"));
+        }
+      }
+    });
+    await waitForCondition(() =>
+      calls.some(
+        (call) =>
+          call.message === "dogpile:metricsHook threw" &&
+          JSON.stringify(call.fields) === JSON.stringify({ error: "promise-like hook failed" })
+      )
+    );
   });
 });
 
@@ -447,6 +467,21 @@ function createFailingAfterFirstSequentialTurnProvider(id: string): ConfiguredMo
       throw new Error("provider failed after first turn");
     }
   };
+}
+
+function promiseLikeRejection(error: unknown): Promise<void> {
+  interface Catchable {
+    catch(onRejected: (reason: unknown) => unknown): Catchable;
+  }
+
+  const promiseLike: Catchable = {
+    catch(onRejected: (reason: unknown) => unknown): Catchable {
+      onRejected(error);
+      return promiseLike;
+    }
+  };
+
+  return promiseLike as unknown as Promise<void>;
 }
 
 function response(text: string, inputTokens: number, outputTokens: number, costUsd: number): ModelResponse {

@@ -828,8 +828,8 @@ function fireHook(
 
   try {
     const result = callback(snapshot);
-    if (result instanceof Promise) {
-      result.catch((err: unknown) => {
+    if (result && typeof (result as Promise<void>).catch === "function") {
+      (result as Promise<void>).catch((err: unknown) => {
         routeMetricsError(err, logger);
       });
     }
